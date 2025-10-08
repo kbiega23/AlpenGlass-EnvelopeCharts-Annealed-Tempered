@@ -291,6 +291,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
 def generate_annealed_curve(min_edge, max_edge, max_area):
     """
     Generate the curve for annealed glass that fills BELOW the constraint curve.
+    The minimum size exclusion only applies to the bottom-left corner (0-16 x 0-16).
     Returns x and y coordinates for the polygon.
     """
     curve_x = []
@@ -300,35 +301,52 @@ def generate_annealed_curve(min_edge, max_edge, max_area):
     curve_x.append(0)
     curve_y.append(0)
     
-    # Go right to min_edge
+    # Go right to min_edge along bottom
     curve_x.append(min_edge)
     curve_y.append(0)
     
-    # Go up to min_edge corner
+    # Go up to min_edge corner (this creates the excluded bottom-left square)
     curve_x.append(min_edge)
     curve_y.append(min_edge)
     
-    # Trace the hyperbolic curve from left to right
-    # Start where x = min_edge
-    x_start = min_edge
-    y_at_start = min(max_area / x_start, max_edge, 150)
+    # Go left back to y-axis at min_edge height
+    curve_x.append(0)
+    curve_y.append(min_edge)
     
-    # Only add if y is above min_edge (we're already at min_edge corner)
-    if y_at_start > min_edge:
-        curve_x.append(x_start)
-        curve_y.append(y_at_start)
+    # Now trace up the y-axis following the area constraint
+    # Find where the hyperbola intersects the y-axis (x approaching 0)
+    # For very small x values, y = max_area / x, capped at max_edge
+    y_at_yaxis = min(max_edge, 150)
     
-    # Continue tracing the hyperbola
-    for x in range(min_edge + 1, min(int(max_edge) + 1, 151)):
+    # Go up the y-axis to the top of the constraint
+    curve_x.append(0)
+    curve_y.append(y_at_yaxis)
+    
+    # Trace the constraint curve from left (y-axis) to right
+    # Start from x = small value and increase
+    for x in range(1, min(int(max_edge) + 1, 151)):
         y = min(max_area / x, max_edge, 150)
         if y >= min_edge:
             curve_x.append(x)
             curve_y.append(y)
         else:
-            # Once y drops below min_edge, stop the hyperbola
+            # Once y drops below min_edge, we've reached the end
+            # Add the final point where curve meets y = min_edge
+            x_at_min = max_area / min_edge
+            if x_at_min <= 150:
+                curve_x.append(x_at_min)
+                curve_y.append(min_edge)
             break
     
-    # From the end of hyperbola, go down to y=0
+    # Check if we need to continue along the max_edge limit
+    if curve_y[-1] >= max_edge - 1:
+        # We hit the edge limit, continue to the right along max_edge
+        last_x = curve_x[-1]
+        if last_x < max_edge:
+            curve_x.append(max_edge)
+            curve_y.append(max_edge)
+    
+    # From the end of the curve, drop down to the x-axis
     if curve_x:
         last_x = curve_x[-1]
         curve_x.append(last_x)
