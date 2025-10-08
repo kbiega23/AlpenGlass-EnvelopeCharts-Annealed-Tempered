@@ -356,7 +356,7 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
     """
     Get key points to label on annealed glass curves.
     Returns list of (x, y, label) tuples for key boundary points.
-    Labels the start point and the transition point where curve leaves max_edge.
+    Labels the start point, transition point, and end point on the curve.
     """
     label_points = []
     
@@ -387,6 +387,15 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
         area_sqft = (x_corner * y_corner) / 144
         label = f"{x_corner:.0f}\" × {y_corner:.0f}\"\n{area_sqft:.1f} sq ft"
         label_points.append((x_corner, y_corner, label))
+    
+    # Point 3: Where the curve meets the bottom boundary (y = min_edge)
+    # At y = min_edge, x = max_area / min_edge
+    x_bottom = max_area / min_edge
+    if x_bottom >= min_edge and x_bottom <= 150:
+        y_bottom = min_edge
+        area_sqft = (x_bottom * y_bottom) / 144
+        label = f"{x_bottom:.0f}\" × {y_bottom:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_bottom, y_bottom, label))
     
     return label_points
 
