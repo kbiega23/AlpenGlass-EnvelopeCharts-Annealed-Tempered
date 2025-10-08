@@ -356,21 +356,22 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
     """
     Get key points to label on annealed glass curves.
     Returns list of (x, y, label) tuples for key boundary points.
-    Labels where the curve intersects y=max_edge and where it intersects x=max_edge.
+    Labels where the hyperbolic curve intersects y=max_edge and x=max_edge boundaries.
     """
     label_points = []
     
-    # Point 1: Where the curve intersects the horizontal line y = max_edge
-    # At x = min_edge, find the actual y value on the curve
-    x_at_min = min_edge
-    y_at_min = min(max_area / x_at_min, max_edge)
+    # Point 1: Where the hyperbolic curve intersects the horizontal line y = max_edge
+    # This is the transition point where the curve bends from horizontal to hyperbolic
+    # It occurs at x = max_area / max_edge
+    x_transition = max_area / max_edge
     
-    if y_at_min >= min_edge:
-        area_sqft = (x_at_min * y_at_min) / 144
-        label = f"{x_at_min:.0f}\" × {y_at_min:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_at_min, y_at_min, label))
+    if x_transition >= min_edge and x_transition <= 150:
+        y_transition = max_edge
+        area_sqft = (x_transition * y_transition) / 144
+        label = f"{x_transition:.0f}\" × {y_transition:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_transition, y_transition, label))
     
-    # Point 2: Where the curve intersects the vertical line x = max_edge
+    # Point 2: Where the hyperbolic curve intersects the vertical line x = max_edge
     # At x = max_edge, y = min(max_area / max_edge, max_edge)
     x_at_max = max_edge
     y_at_max = min(max_area / x_at_max, max_edge)
