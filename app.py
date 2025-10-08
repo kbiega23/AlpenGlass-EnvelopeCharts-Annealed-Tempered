@@ -359,12 +359,7 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
     """
     label_points = []
     
-    # Point 1: Top of the y-axis (0, max_edge)
-    y_top = min(max_edge, 150)
-    area_top = 0  # Area is 0 at x=0
-    # Skip this point as it's at x=0
-    
-    # Point 2: Where curve meets max_edge limit (max_edge, max_edge)
+    # Point 1: Where curve meets max_edge limit (max_edge, max_edge)
     if max_edge <= 150:
         x_at_max = max_edge
         y_at_max = min(max_area / x_at_max, max_edge)
@@ -373,7 +368,7 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
             label = f"{x_at_max:.0f}\" × {y_at_max:.0f}\"\n{area_sqft:.1f} sq ft"
             label_points.append((x_at_max, y_at_max, label))
     
-    # Point 3: Where hyperbola meets the min_edge line
+    # Point 2: Where hyperbola meets the min_edge line
     x_at_min = max_area / min_edge
     if x_at_min <= 150 and x_at_min >= min_edge:
         y_at_min = min_edge
@@ -381,102 +376,7 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
         label = f"{x_at_min:.0f}\" × {y_at_min:.0f}\"\n{area_sqft:.1f} sq ft"
         label_points.append((x_at_min, y_at_min, label))
     
-    # Point 4: Midpoint on the hyperbola for reference
-    x_mid = (min_edge + min(max_edge, x_at_min)) / 2
-    y_mid = min(max_area / x_mid, max_edge)
-    if y_mid >= min_edge:
-        area_sqft = (x_mid * y_mid) / 144
-        label = f"{x_mid:.0f}\" × {y_mid:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_mid, y_mid, label))
-    
-    return label_points\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>Core Range</b>")
-            elif in_tech:
-                Z[i, j] = 1
-                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>⚠️ Technical Limit</b>")
-            else:
-                Z[i, j] = 0
-                if not meets_min:
-                    row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>Below minimum</b>")
-                else:
-                    row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>Outside limits</b>")
-        hover_text.append(row_text)
-    
-    fig.add_trace(go.Heatmap(
-        x=x_range, y=y_range, z=Z,
-        colorscale=[[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0)']],
-        showscale=False, hoverinfo='text', text=hover_text,
-        hovertemplate='%{text}<extra></extra>'
-    ))
-    
-    # Technical limit curve - FIXED to fill below the curve
-    tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area)
-    
-    fig.add_trace(go.Scatter(
-        x=tech_curve_x, y=tech_curve_y, fill='toself',
-        fillcolor='rgba(255, 152, 0, 0.2)',
-        line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
-        name='Technical Limit', hoverinfo='skip'
-    ))
-    
-    # Core range curve - FIXED to fill below the curve
-    core_curve_x, core_curve_y = generate_annealed_curve(min_edge, core_max_edge, core_max_area)
-    
-    fig.add_trace(go.Scatter(
-        x=core_curve_x, y=core_curve_y, fill='toself',
-        fillcolor='rgba(33, 150, 243, 0.3)',
-        line=dict(color='rgba(33, 150, 243, 1)', width=3),
-        name='Core Range', hoverinfo='skip'
-    ))
-    
-    if custom_point:
-        add_custom_point(fig, custom_point, min_edge, core_max_edge, core_max_area, tech_max_edge, tech_max_area, True)
-    
-    title_text = "AlpenGlass Sizing Limits - Annealed Glass"
-    if filter_text:
-        title_text += f"<br><sub>{filter_text}</sub>"
-    
-    fig.update_layout(
-        title=dict(text=title_text, x=0.5, xanchor='center', font=dict(size=16)),
-        xaxis_title="Width (inches)", yaxis_title="Height (inches)",
-        xaxis=dict(range=[0, 150], showgrid=True, gridcolor='lightgray', fixedrange=True, constrain='domain'),
-        yaxis=dict(range=[0, 150], showgrid=True, gridcolor='lightgray', scaleanchor="x", scaleratio=1, fixedrange=True, constrain='domain'),
-        plot_bgcolor='white', hovermode='closest', height=600,
-        margin=dict(l=50, r=50, t=100, b=50),
-        legend=dict(orientation="v", yanchor="top", y=0.98, xanchor="right", x=0.98,
-                   font=dict(size=12), bgcolor="rgba(255,255,255,0.9)", bordercolor="rgba(0,0,0,0.3)", borderwidth=1)
-    )
-    return fig
-
-def get_annealed_label_points(min_edge, max_edge, max_area):
-    """
-    Get key points to label on annealed glass curves.
-    Returns list of (x, y, label) tuples for major corners.
-    """
-    label_points = []
-    
-    # Point 1: Top of the y-axis (0, max_edge)
-    y_top = min(max_edge, 150)
-    area_top = 0  # Area is 0 at x=0
-    # Skip this point as it's at x=0
-    
-    # Point 2: Where curve meets max_edge limit (max_edge, max_edge)
-    if max_edge <= 150:
-        x_at_max = max_edge
-        y_at_max = min(max_area / x_at_max, max_edge)
-        if y_at_max >= max_edge - 1:  # If we're at or near the max edge
-            area_sqft = (x_at_max * y_at_max) / 144
-            label = f"{x_at_max:.0f}\" × {y_at_max:.0f}\"\n{area_sqft:.1f} sq ft"
-            label_points.append((x_at_max, y_at_max, label))
-    
-    # Point 3: Where hyperbola meets the min_edge line
-    x_at_min = max_area / min_edge
-    if x_at_min <= 150 and x_at_min >= min_edge:
-        y_at_min = min_edge
-        area_sqft = (x_at_min * y_at_min) / 144
-        label = f"{x_at_min:.0f}\" × {y_at_min:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_at_min, y_at_min, label))
-    
-    # Point 4: Midpoint on the hyperbola for reference
+    # Point 3: Midpoint on the hyperbola for reference
     x_mid = (min_edge + min(max_edge, x_at_min)) / 2
     y_mid = min(max_area / x_mid, max_edge)
     if y_mid >= min_edge:
