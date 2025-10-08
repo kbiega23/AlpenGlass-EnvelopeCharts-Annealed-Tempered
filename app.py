@@ -361,27 +361,24 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
     label_points = []
     
     # Point 1: Where the curve intersects the horizontal line y = max_edge
-    # The curve is at y = max_edge when x is small enough that max_area/x >= max_edge
-    # This occurs from x = min_edge until x = max_area/max_edge
-    # Label the leftmost point: x = min_edge, y = max_edge
-    x_at_max_y = min_edge
-    y_at_max_y = min(max_area / x_at_max_y, max_edge)
+    # At x = min_edge, find the actual y value on the curve
+    x_at_min = min_edge
+    y_at_min = min(max_area / x_at_min, max_edge)
     
-    # Only add this if the curve actually reaches max_edge at this point
-    if y_at_max_y >= max_edge - 0.5:  # Allow small tolerance
-        area_sqft = (x_at_max_y * max_edge) / 144
-        label = f"{x_at_max_y:.0f}\" × {max_edge:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_at_max_y, max_edge, label))
+    if y_at_min >= min_edge:
+        area_sqft = (x_at_min * y_at_min) / 144
+        label = f"{x_at_min:.0f}\" × {y_at_min:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_at_min, y_at_min, label))
     
     # Point 2: Where the curve intersects the vertical line x = max_edge
     # At x = max_edge, y = min(max_area / max_edge, max_edge)
-    x_at_max_x = max_edge
-    y_at_max_x = min(max_area / x_at_max_x, max_edge)
+    x_at_max = max_edge
+    y_at_max = min(max_area / x_at_max, max_edge)
     
-    if y_at_max_x >= min_edge and x_at_max_x <= 150:
-        area_sqft = (max_edge * y_at_max_x) / 144
-        label = f"{max_edge:.0f}\" × {y_at_max_x:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((max_edge, y_at_max_x, label))
+    if y_at_max >= min_edge and x_at_max <= 150:
+        area_sqft = (x_at_max * y_at_max) / 144
+        label = f"{x_at_max:.0f}\" × {y_at_max:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_at_max, y_at_max, label))
     
     return label_points
 
