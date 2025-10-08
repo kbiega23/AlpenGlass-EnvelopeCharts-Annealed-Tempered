@@ -198,6 +198,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     if show_all and all_configs_df is not None and not all_configs_df.empty:
         core_max_edge = all_configs_df['CoreRange_maxedge_inches'].max()
         tech_max_edge = all_configs_df['Technical_limit_maxedge_inches'].max()
+        # Use the aspect ratio < 2 column for now (both columns have same values currently)
         core_max_area = all_configs_df['MaxArea_AspectRatioLessThanTwo_squarefeet'].max() * 144
         tech_max_area = all_configs_df['MaxArea_AspectRatioLessThanTwo_squarefeet'].max() * 144
     else:
@@ -248,38 +249,8 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
         hovertemplate='%{text}<extra></extra>'
     ))
     
-    # Technical limit curve
-    tech_curve_x, tech_curve_y = [], []
-    
-    # Start from min_edge on x-axis, trace the hyperbolic curve
-    for x in range(min_edge, min(int(tech_max_edge) + 1, 151)):
-        y = min(tech_max_area / x, tech_max_edge, 150)
-        if y >= min_edge:
-            tech_curve_x.append(x)
-            tech_curve_y.append(y)
-    
-    # If we hit the max edge limit, continue along that line
-    if tech_curve_x and tech_curve_y[-1] >= min_edge:
-        # Go up the right edge to max_edge
-        last_x = tech_curve_x[-1]
-        for y in range(int(tech_curve_y[-1]), min(int(tech_max_edge) + 1, 151)):
-            tech_curve_x.append(last_x)
-            tech_curve_y.append(y)
-        
-        # Go left along the top edge
-        for x in range(int(last_x) - 1, min_edge - 1, -1):
-            tech_curve_x.append(x)
-            tech_curve_y.append(tech_max_edge)
-        
-        # Go down the left edge back to where hyperbola meets it
-        final_y = min(tech_max_area / min_edge, tech_max_edge)
-        for y in range(int(tech_max_edge), int(final_y), -1):
-            tech_curve_x.append(min_edge)
-            tech_curve_y.append(y)
-    
-    # Close the shape
-    tech_curve_x.extend([min_edge, min_edge, 0, 0, min_edge])
-    tech_curve_y.extend([min_edge, 0, 0, min_edge, min_edge])
+    # Technical limit curve - FIXED to fill below the curve
+    tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area)
     
     fig.add_trace(go.Scatter(
         x=tech_curve_x, y=tech_curve_y, fill='toself',
@@ -288,38 +259,8 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
         name='Technical Limit', hoverinfo='skip'
     ))
     
-    # Core range curve
-    core_curve_x, core_curve_y = [], []
-    
-    # Start from min_edge on x-axis, trace the hyperbolic curve
-    for x in range(min_edge, min(int(core_max_edge) + 1, 151)):
-        y = min(core_max_area / x, core_max_edge, 150)
-        if y >= min_edge:
-            core_curve_x.append(x)
-            core_curve_y.append(y)
-    
-    # If we hit the max edge limit, continue along that line
-    if core_curve_x and core_curve_y[-1] >= min_edge:
-        # Go up the right edge to max_edge
-        last_x = core_curve_x[-1]
-        for y in range(int(core_curve_y[-1]), min(int(core_max_edge) + 1, 151)):
-            core_curve_x.append(last_x)
-            core_curve_y.append(y)
-        
-        # Go left along the top edge
-        for x in range(int(last_x) - 1, min_edge - 1, -1):
-            core_curve_x.append(x)
-            core_curve_y.append(core_max_edge)
-        
-        # Go down the left edge back to where hyperbola meets it
-        final_y = min(core_max_area / min_edge, core_max_edge)
-        for y in range(int(core_max_edge), int(final_y), -1):
-            core_curve_x.append(min_edge)
-            core_curve_y.append(y)
-    
-    # Close the shape
-    core_curve_x.extend([min_edge, min_edge, 0, 0, min_edge])
-    core_curve_y.extend([min_edge, 0, 0, min_edge, min_edge])
+    # Core range curve - FIXED to fill below the curve
+    core_curve_x, core_curve_y = generate_annealed_curve(min_edge, core_max_edge, core_max_area)
     
     fig.add_trace(go.Scatter(
         x=core_curve_x, y=core_curve_y, fill='toself',
@@ -346,6 +287,58 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
                    font=dict(size=12), bgcolor="rgba(255,255,255,0.9)", bordercolor="rgba(0,0,0,0.3)", borderwidth=1)
     )
     return fig
+
+def generate_annealed_curve(min_edge, max_edge, max_area):
+    """
+    Generate the curve for annealed glass that fills BELOW the constraint curve.
+    Returns x and y coordinates for the polygon.
+    """
+    curve_x = []
+    curve_y = []
+    
+    # Start at origin (0, 0)
+    curve_x.append(0)
+    curve_y.append(0)
+    
+    # Go right to min_edge
+    curve_x.append(min_edge)
+    curve_y.append(0)
+    
+    # Go up to min_edge corner
+    curve_x.append(min_edge)
+    curve_y.append(min_edge)
+    
+    # Trace the hyperbolic curve from left to right
+    # Start where x = min_edge
+    x_start = min_edge
+    y_at_start = min(max_area / x_start, max_edge, 150)
+    
+    # Only add if y is above min_edge (we're already at min_edge corner)
+    if y_at_start > min_edge:
+        curve_x.append(x_start)
+        curve_y.append(y_at_start)
+    
+    # Continue tracing the hyperbola
+    for x in range(min_edge + 1, min(int(max_edge) + 1, 151)):
+        y = min(max_area / x, max_edge, 150)
+        if y >= min_edge:
+            curve_x.append(x)
+            curve_y.append(y)
+        else:
+            # Once y drops below min_edge, stop the hyperbola
+            break
+    
+    # From the end of hyperbola, go down to y=0
+    if curve_x:
+        last_x = curve_x[-1]
+        curve_x.append(last_x)
+        curve_y.append(0)
+    
+    # Close the polygon back to origin
+    curve_x.append(0)
+    curve_y.append(0)
+    
+    return curve_x, curve_y
 
 def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech_param1, tech_param2, is_annealed):
     """Add custom size point to plot"""
