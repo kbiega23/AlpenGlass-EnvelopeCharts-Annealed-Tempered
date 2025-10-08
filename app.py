@@ -356,46 +356,32 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
     """
     Get key points to label on annealed glass curves.
     Returns list of (x, y, label) tuples for key boundary points.
-    Labels the start point, transition point, and end point on the curve.
+    Labels where the curve intersects y=max_edge and where it intersects x=max_edge.
     """
     label_points = []
     
-    # Point 1: Where the curve starts on the left side (after the min_edge cutout)
-    # At x = min_edge, the curve is at y = min(max_area / min_edge, max_edge)
-    x_left = min_edge
-    y_left = min(max_area / x_left, max_edge)
-    if y_left >= min_edge:
-        area_sqft = (x_left * y_left) / 144
-        label = f"{x_left:.0f}\" × {y_left:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_left, y_left, label))
+    # Point 1: Where the curve intersects the horizontal line y = max_edge
+    # The curve is at y = max_edge when x is small enough that max_area/x >= max_edge
+    # This occurs from x = min_edge until x = max_area/max_edge
+    # Label the leftmost point: x = min_edge, y = max_edge
+    x_at_max_y = min_edge
+    y_at_max_y = min(max_area / x_at_max_y, max_edge)
     
-    # Point 2: Where the curve transitions from the horizontal max_edge line to the hyperbola
-    # This occurs at x = max_area / max_edge
-    x_transition = max_area / max_edge
+    # Only add this if the curve actually reaches max_edge at this point
+    if y_at_max_y >= max_edge - 0.5:  # Allow small tolerance
+        area_sqft = (x_at_max_y * max_edge) / 144
+        label = f"{x_at_max_y:.0f}\" × {max_edge:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_at_max_y, max_edge, label))
     
-    # Only label the transition point if it's different from the corner
-    # and if it's within reasonable bounds
-    if x_transition >= min_edge and x_transition < max_edge and x_transition <= 150:
-        y_transition = max_edge
-        area_sqft = (x_transition * y_transition) / 144
-        label = f"{x_transition:.0f}\" × {y_transition:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_transition, y_transition, label))
-    elif x_transition >= max_edge and max_edge <= 150:
-        # If transition is beyond max_edge, the curve goes to the corner
-        x_corner = max_edge
-        y_corner = max_edge  
-        area_sqft = (x_corner * y_corner) / 144
-        label = f"{x_corner:.0f}\" × {y_corner:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_corner, y_corner, label))
+    # Point 2: Where the curve intersects the vertical line x = max_edge
+    # At x = max_edge, y = min(max_area / max_edge, max_edge)
+    x_at_max_x = max_edge
+    y_at_max_x = min(max_area / x_at_max_x, max_edge)
     
-    # Point 3: Where the curve meets the bottom boundary (y = min_edge)
-    # At y = min_edge, x = max_area / min_edge
-    x_bottom = max_area / min_edge
-    if x_bottom >= min_edge and x_bottom <= 150:
-        y_bottom = min_edge
-        area_sqft = (x_bottom * y_bottom) / 144
-        label = f"{x_bottom:.0f}\" × {y_bottom:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_bottom, y_bottom, label))
+    if y_at_max_x >= min_edge and x_at_max_x <= 150:
+        area_sqft = (max_edge * y_at_max_x) / 144
+        label = f"{max_edge:.0f}\" × {y_at_max_x:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((max_edge, y_at_max_x, label))
     
     return label_points
 
