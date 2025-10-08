@@ -355,12 +355,12 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
 def get_annealed_label_points(min_edge, max_edge, max_area):
     """
     Get key points to label on annealed glass curves.
-    Returns list of (x, y, label) tuples for intersections with axis boundaries.
+    Returns list of (x, y, label) tuples for key boundary points.
     """
     label_points = []
     
     # Point 1: Where the curve starts on the left side (after the min_edge cutout)
-    # At x = min_edge, y = min(max_area / min_edge, max_edge)
+    # At x = min_edge, the curve is at y = min(max_area / min_edge, max_edge)
     x_left = min_edge
     y_left = min(max_area / x_left, max_edge)
     if y_left >= min_edge:
@@ -368,35 +368,14 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
         label = f"{x_left:.0f}\" × {y_left:.0f}\"\n{area_sqft:.1f} sq ft"
         label_points.append((x_left, y_left, label))
     
-    # Find where the curve transitions from max_edge horizontal line to hyperbola
-    # This happens when max_area / x = max_edge, so x = max_area / max_edge
-    x_transition = max_area / max_edge
-    
-    # Point 2: The corner point (max_edge, max_edge) if the curve reaches it
-    # The curve reaches the corner if x_transition >= max_edge
-    if x_transition >= max_edge and max_edge <= 150:
+    # Point 2: The corner at (max_edge, max_edge)
+    # This represents the maximum square size allowed
+    if max_edge <= 150:
         x_corner = max_edge
         y_corner = max_edge
         area_sqft = (x_corner * y_corner) / 144
         label = f"{x_corner:.0f}\" × {y_corner:.0f}\"\n{area_sqft:.1f} sq ft"
         label_points.append((x_corner, y_corner, label))
-    else:
-        # Point 2 alternative: Transition point where curve leaves max_edge line
-        if x_transition >= min_edge and x_transition <= 150:
-            x_trans = x_transition
-            y_trans = max_edge
-            area_sqft = (x_trans * y_trans) / 144
-            label = f"{x_trans:.0f}\" × {y_trans:.0f}\"\n{area_sqft:.1f} sq ft"
-            label_points.append((x_trans, y_trans, label))
-    
-    # Point 3: Where the curve meets the bottom boundary (y = min_edge)
-    # Only include this if it's within the chart bounds
-    x_bottom = max_area / min_edge
-    if x_bottom <= 150 and x_bottom >= min_edge:
-        y_bottom = min_edge
-        area_sqft = (x_bottom * y_bottom) / 144
-        label = f"{x_bottom:.0f}\" × {y_bottom:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_bottom, y_bottom, label))
     
     return label_points
 
