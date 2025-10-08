@@ -356,6 +356,7 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
     """
     Get key points to label on annealed glass curves.
     Returns list of (x, y, label) tuples for key boundary points.
+    Labels the start point and the transition point where curve leaves max_edge.
     """
     label_points = []
     
@@ -368,11 +369,21 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
         label = f"{x_left:.0f}\" × {y_left:.0f}\"\n{area_sqft:.1f} sq ft"
         label_points.append((x_left, y_left, label))
     
-    # Point 2: The corner at (max_edge, max_edge)
-    # This represents the maximum square size allowed
-    if max_edge <= 150:
+    # Point 2: Where the curve transitions from the horizontal max_edge line to the hyperbola
+    # This occurs at x = max_area / max_edge
+    x_transition = max_area / max_edge
+    
+    # Only label the transition point if it's different from the corner
+    # and if it's within reasonable bounds
+    if x_transition >= min_edge and x_transition < max_edge and x_transition <= 150:
+        y_transition = max_edge
+        area_sqft = (x_transition * y_transition) / 144
+        label = f"{x_transition:.0f}\" × {y_transition:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_transition, y_transition, label))
+    elif x_transition >= max_edge and max_edge <= 150:
+        # If transition is beyond max_edge, the curve goes to the corner
         x_corner = max_edge
-        y_corner = max_edge
+        y_corner = max_edge  
         area_sqft = (x_corner * y_corner) / 144
         label = f"{x_corner:.0f}\" × {y_corner:.0f}\"\n{area_sqft:.1f} sq ft"
         label_points.append((x_corner, y_corner, label))
