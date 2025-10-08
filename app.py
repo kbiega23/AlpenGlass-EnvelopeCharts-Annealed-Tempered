@@ -355,34 +355,36 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
 def get_annealed_label_points(min_edge, max_edge, max_area):
     """
     Get key points to label on annealed glass curves.
-    Returns list of (x, y, label) tuples for major corners.
+    Returns list of (x, y, label) tuples for intersections with axis boundaries.
     """
     label_points = []
     
-    # Point 1: Where curve meets max_edge limit (max_edge, max_edge)
-    if max_edge <= 150:
-        x_at_max = max_edge
-        y_at_max = min(max_area / x_at_max, max_edge)
-        if y_at_max >= max_edge - 1:  # If we're at or near the max edge
-            area_sqft = (x_at_max * y_at_max) / 144
-            label = f"{x_at_max:.0f}\" × {y_at_max:.0f}\"\n{area_sqft:.1f} sq ft"
-            label_points.append((x_at_max, y_at_max, label))
+    # Point 1: Where hyperbola intersects the y-axis (x = min_edge after the cutout)
+    # At x = min_edge, y = max_area / min_edge (capped by max_edge)
+    x_left = min_edge
+    y_left = min(max_area / x_left, max_edge)
+    if y_left >= min_edge:
+        area_sqft = (x_left * y_left) / 144
+        label = f"{x_left:.0f}\" × {y_left:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_left, y_left, label))
     
-    # Point 2: Where hyperbola meets the min_edge line
-    x_at_min = max_area / min_edge
-    if x_at_min <= 150 and x_at_min >= min_edge:
-        y_at_min = min_edge
-        area_sqft = (x_at_min * y_at_min) / 144
-        label = f"{x_at_min:.0f}\" × {y_at_min:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_at_min, y_at_min, label))
+    # Point 2: Where hyperbola intersects the x-axis constraint (y = min_edge)
+    # At y = min_edge, x = max_area / min_edge (if it's within bounds)
+    y_bottom = min_edge
+    x_bottom = max_area / y_bottom
+    if x_bottom <= 150 and x_bottom >= min_edge:
+        area_sqft = (x_bottom * y_bottom) / 144
+        label = f"{x_bottom:.0f}\" × {y_bottom:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_bottom, y_bottom, label))
     
-    # Point 3: Midpoint on the hyperbola for reference
-    x_mid = (min_edge + min(max_edge, x_at_min)) / 2
-    y_mid = min(max_area / x_mid, max_edge)
-    if y_mid >= min_edge:
-        area_sqft = (x_mid * y_mid) / 144
-        label = f"{x_mid:.0f}\" × {y_mid:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_mid, y_mid, label))
+    # Point 3: Corner where max_edge constraints meet (if the curve reaches there)
+    # This happens when the hyperbola is still above max_edge at x = max_edge
+    x_corner = max_edge
+    y_corner = min(max_area / x_corner, max_edge)
+    if y_corner >= max_edge - 1:  # If we're at the corner
+        area_sqft = (x_corner * y_corner) / 144
+        label = f"{x_corner:.0f}\" × {y_corner:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_corner, y_corner, label))
     
     return label_points
 
