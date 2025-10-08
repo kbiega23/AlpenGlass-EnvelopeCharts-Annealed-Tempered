@@ -250,18 +250,34 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     
     # Technical limit curve
     tech_curve_x, tech_curve_y = [], []
-    for x in range(min_edge, min(tech_max_edge + 1, 151)):
-        max_y = min(tech_max_area / x, tech_max_edge, 150)
-        if max_y >= min_edge:
-            tech_curve_x.append(x)
-            tech_curve_y.append(max_y)
     
-    for y in range(int(tech_curve_y[-1]) if tech_curve_y else min_edge, min(tech_max_edge + 1, 151)):
-        max_x = min(tech_max_area / y, tech_max_edge, 150)
-        if max_x >= min_edge:
-            tech_curve_x.append(max_x)
+    # Start from min_edge on x-axis, trace the hyperbolic curve
+    for x in range(min_edge, min(int(tech_max_edge) + 1, 151)):
+        y = min(tech_max_area / x, tech_max_edge, 150)
+        if y >= min_edge:
+            tech_curve_x.append(x)
             tech_curve_y.append(y)
     
+    # If we hit the max edge limit, continue along that line
+    if tech_curve_x and tech_curve_y[-1] >= min_edge:
+        # Go up the right edge to max_edge
+        last_x = tech_curve_x[-1]
+        for y in range(int(tech_curve_y[-1]), min(int(tech_max_edge) + 1, 151)):
+            tech_curve_x.append(last_x)
+            tech_curve_y.append(y)
+        
+        # Go left along the top edge
+        for x in range(int(last_x) - 1, min_edge - 1, -1):
+            tech_curve_x.append(x)
+            tech_curve_y.append(tech_max_edge)
+        
+        # Go down the left edge back to where hyperbola meets it
+        final_y = min(tech_max_area / min_edge, tech_max_edge)
+        for y in range(int(tech_max_edge), int(final_y), -1):
+            tech_curve_x.append(min_edge)
+            tech_curve_y.append(y)
+    
+    # Close the shape
     tech_curve_x.extend([min_edge, min_edge, 0, 0, min_edge])
     tech_curve_y.extend([min_edge, 0, 0, min_edge, min_edge])
     
@@ -274,18 +290,34 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     
     # Core range curve
     core_curve_x, core_curve_y = [], []
-    for x in range(min_edge, min(core_max_edge + 1, 151)):
-        max_y = min(core_max_area / x, core_max_edge, 150)
-        if max_y >= min_edge:
-            core_curve_x.append(x)
-            core_curve_y.append(max_y)
     
-    for y in range(int(core_curve_y[-1]) if core_curve_y else min_edge, min(core_max_edge + 1, 151)):
-        max_x = min(core_max_area / y, core_max_edge, 150)
-        if max_x >= min_edge:
-            core_curve_x.append(max_x)
+    # Start from min_edge on x-axis, trace the hyperbolic curve
+    for x in range(min_edge, min(int(core_max_edge) + 1, 151)):
+        y = min(core_max_area / x, core_max_edge, 150)
+        if y >= min_edge:
+            core_curve_x.append(x)
             core_curve_y.append(y)
     
+    # If we hit the max edge limit, continue along that line
+    if core_curve_x and core_curve_y[-1] >= min_edge:
+        # Go up the right edge to max_edge
+        last_x = core_curve_x[-1]
+        for y in range(int(core_curve_y[-1]), min(int(core_max_edge) + 1, 151)):
+            core_curve_x.append(last_x)
+            core_curve_y.append(y)
+        
+        # Go left along the top edge
+        for x in range(int(last_x) - 1, min_edge - 1, -1):
+            core_curve_x.append(x)
+            core_curve_y.append(core_max_edge)
+        
+        # Go down the left edge back to where hyperbola meets it
+        final_y = min(core_max_area / min_edge, core_max_edge)
+        for y in range(int(core_max_edge), int(final_y), -1):
+            core_curve_x.append(min_edge)
+            core_curve_y.append(y)
+    
+    # Close the shape
     core_curve_x.extend([min_edge, min_edge, 0, 0, min_edge])
     core_curve_y.extend([min_edge, 0, 0, min_edge, min_edge])
     
