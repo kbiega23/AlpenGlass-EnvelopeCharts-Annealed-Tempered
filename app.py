@@ -43,6 +43,9 @@ This interactive tool helps you determine if your window dimensions fit within A
 - Hover over any point to see exact dimensions and area
 - The chart displays both portrait and landscape orientations
 - Download the chart as PNG to save the configuration details
+
+**⚠️ Important Note:**
+The size ranges depicted in these charts are applicable to triple pane units only. Quad configurations with inter-pane gap ≤ 3/8" have additional size constraints due to glass deflection risk. This exception applies to most quad configurations with an OA ≤ 1-5/8". Talk to your sales representative if larger quad sizing is needed for your project. Engineering review required.
 """)
 
 st.markdown("---")
@@ -589,6 +592,18 @@ def main():
             
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
+            
+            # Add disclaimer for all glass types
+            st.warning("⚠️ **Important:** The size ranges depicted in these charts are applicable to triple pane units only. Quad configurations with inter-pane gap ≤ 3/8\" have additional size constraints due to glass deflection risk. This exception applies to most quad configurations with an OA ≤ 1-5/8\". Talk to your sales representative if larger quad sizing is needed for your project. Engineering review required.")
+            
+            # Add quad sizing table
+            st.markdown("#### Max Sizing for Quad Configurations with OA ≤ 1-5/8\"")
+            quad_data = {
+                "Outer Lites": ["3mm", "5mm", "6mm"],
+                "Max Size": ["18ft²", "35ft²", "40ft²"]
+            }
+            quad_df = pd.DataFrame(quad_data)
+            st.table(quad_df)
             
             # Add annealed note
             if glass_type == "Annealed":
