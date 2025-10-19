@@ -45,49 +45,7 @@ This interactive tool helps you determine if your window dimensions fit within A
 - Download the chart as PNG to save the configuration details
 
 **⚠️ Important Note:**
-The size ranges depicted in these charts are applicable to triple pane units only. Quad configurations with inter-pane gap ≤ 3/8" have additional size constraints due to glass def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech_param1, tech_param2, is_annealed, core_area=None, tech_area=None):
-    """Add custom size point to plot"""
-    custom_width, custom_height = custom_point
-    area_sqft = (custom_width * custom_height) / 144
-    area_sqin = custom_width * custom_height
-    meets_min = (custom_width >= min_edge or custom_height >= min_edge)
-    
-    if is_annealed:
-        max_dim = max(custom_width, custom_height)
-        in_tech = (area_sqin <= tech_param2 and max_dim <= tech_param1 and meets_min)
-        in_core = (area_sqin <= core_param2 and max_dim <= core_param1 and meets_min)
-    else:
-        # Tempered glass - check both dimensional and area constraints
-        in_tech_dims = ((custom_width <= tech_param1 and custom_height <= tech_param2) or 
-                       (custom_width <= tech_param2 and custom_height <= tech_param1)) and meets_min
-        in_core_dims = ((custom_width <= core_param1 and custom_height <= core_param2) or 
-                       (custom_width <= core_param2 and custom_height <= core_param1)) and meets_min
-        
-        # Check area constraints if provided
-        in_tech_area = area_sqin <= tech_area if tech_area else True
-        in_core_area = area_sqin <= core_area if core_area else True
-        
-        in_tech = in_tech_dims and in_tech_area
-        in_core = in_core_dims and in_core_area
-    
-    if in_core:
-        marker_color, status_text = 'rgb(0, 200, 0)', "✓ Within Standard Sizing"
-    elif in_tech:
-        marker_color, status_text = 'rgb(255, 165, 0)', "⚠ Within Semi- or Full-Custom Range"
-    elif not meets_min:
-        marker_color, status_text = 'rgb(255, 0, 0)', "✗ Below Minimum Size"
-    else:
-        marker_color, status_text = 'rgb(255, 0, 0)', "✗ Outside Technical Limits"
-    
-    fig.add_trace(go.Scatter(
-        x=[custom_width], y=[custom_height], mode='markers+text',
-        marker=dict(size=15, color=marker_color, symbol='star', line=dict(color='white', width=2)),
-        text=[f"{custom_width}\" × {custom_height}\" ({area_sqft:.1f} sf)"],
-        textposition="top center",
-        textfont=dict(size=12, color=marker_color, family="Arial Black"),
-        name='Your Size',
-        hovertemplate=f"<b>Your Custom Size</b><br>Width: {custom_width}\"<br>Height: {custom_height}\"<br>Area: {area_sqft:.1f} sq ft<br>{status_text}<extra></extra>"
-    ))lection risk. This exception applies to most quad configurations with an OA ≤ 1-5/8". Talk to your sales representative if larger quad sizing is needed for your project. Engineering review required.
+The size ranges depicted in these charts are applicable to triple pane units only. Quad configurations with inter-pane gap ≤ 3/8" have additional size constraints due to glass deflection risk. This exception applies to most quad configurations with an OA ≤ 1-5/8". Talk to your sales representative if larger quad sizing is needed for your project. Engineering review required.
 """)
 
 st.markdown("---")
@@ -118,6 +76,110 @@ def load_data():
     
     st.error("Excel file not found.")
     return None, None
+
+def generate_tempered_constrained_curve(min_edge, max_long, max_short, max_area):
+    """
+    Generate curve for tempered glass when area constraint is more restrictive than dimensions.
+    Creates a hybrid envelope respecting both dimensional and area limits.
+    """
+    curve_x = []
+    curve_y = []
+    
+    # Start at origin
+    curve_x.append(0)
+    curve_y.append(0)
+    
+    # Go right to min_edge
+    curve_x.append(min_edge)
+    curve_y.append(0)
+    
+    # Go up to min_edge corner
+    curve_x.append(min_edge)
+    curve_y.append(min_edge)
+    
+    # Go left back to y-axis
+    curve_x.append(0)
+    curve_y.append(min_edge)
+    
+    # Go up y-axis to the shorter of: max_short or area-limited height at x=0
+    y_at_yaxis = min(max_short, 150)
+    curve_x.append(0)
+    curve_y.append(y_at_yaxis)
+    
+    # Calculate where area constraint intersects with y = max_short
+    x_at_short = max_area / max_short
+    
+    if x_at_short <= max_long:
+        # Area constraint hits before max_long
+        # Trace along max_short (horizontal)
+        for x in range(1, min(int(x_at_short) + 1, 151)):
+            if x * max_short <= max_area:
+                curve_x.append(x)
+                curve_y.append(max_short)
+        
+        # Now trace the hyperbolic area constraint down to max_long
+        for x in range(int(x_at_short), min(int(max_long) + 1, 151)):
+            y = min(max_area / x, max_short, 150)
+            if y >= min_edge and x <= max_long:
+                curve_x.append(x)
+                curve_y.append(y)
+    else:
+        # Dimensional constraint is binding (standard rectangle)
+        # Top edge
+        curve_x.append(max_short)
+        curve_y.append(max_short)
+        
+        curve_x.append(max_short)
+        curve_y.append(max_long)
+        
+        # Right edge  
+        curve_x.append(max_long)
+        curve_y.append(max_long)
+        
+        curve_x.append(max_long)
+        curve_y.append(max_short)
+    
+    # Drop down to x-axis
+    if curve_x:
+        last_x = curve_x[-1]
+        curve_x.append(last_x)
+        curve_y.append(0)
+    
+    # Close polygon
+    curve_x.append(0)
+    curve_y.append(0)
+    
+    return curve_x, curve_y
+
+def get_tempered_label_points(min_edge, max_long, max_short, max_area, is_area_constrained):
+    """
+    Get key points to label on tempered glass envelopes.
+    Handles both standard rectangular and area-constrained cases.
+    """
+    label_points = []
+    
+    if is_area_constrained:
+        # Label where area constraint intersects with the max_short boundary
+        x_at_short = max_area / max_short
+        if x_at_short >= min_edge and x_at_short <= 150:
+            area_sqft = (x_at_short * max_short) / 144
+            label = f"{x_at_short:.0f}\" × {max_short:.0f}\"\n{area_sqft:.1f} sq ft"
+            label_points.append((x_at_short, max_short, label))
+        
+        # Label where area constraint intersects with the max_long boundary
+        y_at_long = max_area / max_long
+        if y_at_long >= min_edge and max_long <= 150:
+            area_sqft = (max_long * y_at_long) / 144
+            label = f"{max_long:.0f}\" × {y_at_long:.0f}\"\n{area_sqft:.1f} sq ft"
+            label_points.append((max_long, y_at_long, label))
+    else:
+        # Standard rectangular labels
+        label_points = [
+            (max_long, max_short, f"{max_long}\" × {max_short}\"\n{(max_long * max_short / 144):.1f} sq ft"),
+            (max_short, max_long, f"{max_short}\" × {max_long}\"\n{(max_short * max_long / 144):.1f} sq ft"),
+        ]
+    
+    return label_points
 
 def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_df=None, custom_point=None, filter_text=""):
     """Create plotly figure for tempered glass"""
@@ -324,121 +386,104 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
     )
     return fig
 
-def generate_tempered_constrained_curve(min_edge, max_long, max_short, max_area):
+def generate_annealed_curve(min_edge, max_edge, max_area):
     """
-    Generate curve for tempered glass when area constraint is more restrictive than dimensions.
-    Creates a hybrid envelope respecting both dimensional and area limits.
+    Generate the curve for annealed glass that fills BELOW the constraint curve.
+    The minimum size exclusion only applies to the bottom-left corner (0-16 x 0-16).
+    Returns x and y coordinates for the polygon.
     """
     curve_x = []
     curve_y = []
     
-    # Start at origin
+    # Start at origin (0, 0)
     curve_x.append(0)
     curve_y.append(0)
     
-    # Go right to min_edge
+    # Go right to min_edge along bottom
     curve_x.append(min_edge)
     curve_y.append(0)
     
-    # Go up to min_edge corner
+    # Go up to min_edge corner (this creates the excluded bottom-left square)
     curve_x.append(min_edge)
     curve_y.append(min_edge)
     
-    # Go left back to y-axis
+    # Go left back to y-axis at min_edge height
     curve_x.append(0)
     curve_y.append(min_edge)
     
-    # Go up y-axis to the shorter of: max_short or area-limited height at x=0
-    y_at_yaxis = min(max_short, 150)
+    # Now trace up the y-axis following the area constraint
+    # Find where the hyperbola intersects the y-axis (x approaching 0)
+    # For very small x values, y = max_area / x, capped at max_edge
+    y_at_yaxis = min(max_edge, 150)
+    
+    # Go up the y-axis to the top of the constraint
     curve_x.append(0)
     curve_y.append(y_at_yaxis)
     
-    # Trace the boundary considering both constraints
-    # We need to trace along max_short until we hit the area constraint
+    # Trace the constraint curve from left (y-axis) to right
+    # Start from x = small value and increase
+    for x in range(1, min(int(max_edge) + 1, 151)):
+        y = min(max_area / x, max_edge, 150)
+        if y >= min_edge:
+            curve_x.append(x)
+            curve_y.append(y)
+        else:
+            # Once y drops below min_edge, we've reached the end
+            # Add the final point where curve meets y = min_edge
+            x_at_min = max_area / min_edge
+            if x_at_min <= 150:
+                curve_x.append(x_at_min)
+                curve_y.append(min_edge)
+            break
     
-    # Calculate where area constraint intersects with y = max_short
-    x_at_short = max_area / max_short
+    # Check if we need to continue along the max_edge limit
+    if curve_y[-1] >= max_edge - 1:
+        # We hit the edge limit, continue to the right along max_edge
+        last_x = curve_x[-1]
+        if last_x < max_edge:
+            curve_x.append(max_edge)
+            curve_y.append(max_edge)
     
-    if x_at_short <= max_long:
-        # Area constraint hits before max_long
-        # Trace along max_short (horizontal)
-        for x in range(1, min(int(x_at_short) + 1, 151)):
-            if x * max_short <= max_area:
-                curve_x.append(x)
-                curve_y.append(max_short)
-        
-        # Now trace the hyperbolic area constraint down to max_long
-        for x in range(int(x_at_short), min(int(max_long) + 1, 151)):
-            y = min(max_area / x, max_short, 150)
-            if y >= min_edge and x <= max_long:
-                curve_x.append(x)
-                curve_y.append(y)
-        
-        # Check if we need to go down max_long edge
-        if curve_x and curve_x[-1] < max_long:
-            last_y = max_area / max_long
-            if last_y < max_short:
-                # Go to the corner at max_long
-                for x in range(int(curve_x[-1]), min(int(max_long) + 1, 151)):
-                    y = max_area / x if x > 0 else 150
-                    if y >= min_edge:
-                        curve_x.append(x)
-                        curve_y.append(y)
-    else:
-        # Dimensional constraint is binding (standard rectangle)
-        # Top edge
-        curve_x.append(max_short)
-        curve_y.append(max_short)
-        
-        curve_x.append(max_short)
-        curve_y.append(max_long)
-        
-        # Right edge  
-        curve_x.append(max_long)
-        curve_y.append(max_long)
-        
-        curve_x.append(max_long)
-        curve_y.append(max_short)
-    
-    # Drop down to x-axis
+    # From the end of the curve, drop down to the x-axis
     if curve_x:
         last_x = curve_x[-1]
         curve_x.append(last_x)
         curve_y.append(0)
     
-    # Close polygon
+    # Close the polygon back to origin
     curve_x.append(0)
     curve_y.append(0)
     
     return curve_x, curve_y
 
-def get_tempered_label_points(min_edge, max_long, max_short, max_area, is_area_constrained):
+def get_annealed_label_points(min_edge, max_edge, max_area):
     """
-    Get key points to label on tempered glass envelopes.
-    Handles both standard rectangular and area-constrained cases.
+    Get key points to label on annealed glass curves.
+    Returns list of (x, y, label) tuples for key boundary points.
+    Labels where the hyperbolic curve intersects y=max_edge and x=max_edge boundaries.
     """
     label_points = []
     
-    if is_area_constrained:
-        # Label where area constraint intersects with the max_short boundary
-        x_at_short = max_area / max_short
-        if x_at_short >= min_edge and x_at_short <= 150:
-            area_sqft = (x_at_short * max_short) / 144
-            label = f"{x_at_short:.0f}\" × {max_short:.0f}\"\n{area_sqft:.1f} sq ft"
-            label_points.append((x_at_short, max_short, label))
-        
-        # Label where area constraint intersects with the max_long boundary
-        y_at_long = max_area / max_long
-        if y_at_long >= min_edge and max_long <= 150:
-            area_sqft = (max_long * y_at_long) / 144
-            label = f"{max_long:.0f}\" × {y_at_long:.0f}\"\n{area_sqft:.1f} sq ft"
-            label_points.append((max_long, y_at_long, label))
-    else:
-        # Standard rectangular labels
-        label_points = [
-            (max_long, max_short, f"{max_long}\" × {max_short}\"\n{(max_long * max_short / 144):.1f} sq ft"),
-            (max_short, max_long, f"{max_short}\" × {max_long}\"\n{(max_short * max_long / 144):.1f} sq ft"),
-        ]
+    # Point 1: Where the hyperbolic curve intersects the horizontal line y = max_edge
+    # This is the transition point where the curve bends from horizontal to hyperbolic
+    # It occurs at x = max_area / max_edge
+    x_transition = max_area / max_edge
+    
+    if x_transition >= min_edge and x_transition <= 150:
+        y_transition = max_edge
+        area_sqft = (x_transition * y_transition) / 144
+        label = f"{x_transition:.0f}\" × {y_transition:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_transition, y_transition, label))
+    
+    # Point 2: Where the hyperbolic curve intersects the vertical line x = max_edge
+    # At x = max_edge, y = min(max_area / max_edge, max_edge)
+    x_at_max = max_edge
+    y_at_max = min(max_area / x_at_max, max_edge)
+    
+    if y_at_max >= min_edge and x_at_max <= 150:
+        area_sqft = (x_at_max * y_at_max) / 144
+        label = f"{x_at_max:.0f}\" × {y_at_max:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_at_max, y_at_max, label))
     
     return label_points
 
@@ -569,108 +614,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     )
     return fig
 
-def get_annealed_label_points(min_edge, max_edge, max_area):
-    """
-    Get key points to label on annealed glass curves.
-    Returns list of (x, y, label) tuples for key boundary points.
-    Labels where the hyperbolic curve intersects y=max_edge and x=max_edge boundaries.
-    """
-    label_points = []
-    
-    # Point 1: Where the hyperbolic curve intersects the horizontal line y = max_edge
-    # This is the transition point where the curve bends from horizontal to hyperbolic
-    # It occurs at x = max_area / max_edge
-    x_transition = max_area / max_edge
-    
-    if x_transition >= min_edge and x_transition <= 150:
-        y_transition = max_edge
-        area_sqft = (x_transition * y_transition) / 144
-        label = f"{x_transition:.0f}\" × {y_transition:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_transition, y_transition, label))
-    
-    # Point 2: Where the hyperbolic curve intersects the vertical line x = max_edge
-    # At x = max_edge, y = min(max_area / max_edge, max_edge)
-    x_at_max = max_edge
-    y_at_max = min(max_area / x_at_max, max_edge)
-    
-    if y_at_max >= min_edge and x_at_max <= 150:
-        area_sqft = (x_at_max * y_at_max) / 144
-        label = f"{x_at_max:.0f}\" × {y_at_max:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_at_max, y_at_max, label))
-    
-    return label_points
-
-def generate_annealed_curve(min_edge, max_edge, max_area):
-    """
-    Generate the curve for annealed glass that fills BELOW the constraint curve.
-    The minimum size exclusion only applies to the bottom-left corner (0-16 x 0-16).
-    Returns x and y coordinates for the polygon.
-    """
-    curve_x = []
-    curve_y = []
-    
-    # Start at origin (0, 0)
-    curve_x.append(0)
-    curve_y.append(0)
-    
-    # Go right to min_edge along bottom
-    curve_x.append(min_edge)
-    curve_y.append(0)
-    
-    # Go up to min_edge corner (this creates the excluded bottom-left square)
-    curve_x.append(min_edge)
-    curve_y.append(min_edge)
-    
-    # Go left back to y-axis at min_edge height
-    curve_x.append(0)
-    curve_y.append(min_edge)
-    
-    # Now trace up the y-axis following the area constraint
-    # Find where the hyperbola intersects the y-axis (x approaching 0)
-    # For very small x values, y = max_area / x, capped at max_edge
-    y_at_yaxis = min(max_edge, 150)
-    
-    # Go up the y-axis to the top of the constraint
-    curve_x.append(0)
-    curve_y.append(y_at_yaxis)
-    
-    # Trace the constraint curve from left (y-axis) to right
-    # Start from x = small value and increase
-    for x in range(1, min(int(max_edge) + 1, 151)):
-        y = min(max_area / x, max_edge, 150)
-        if y >= min_edge:
-            curve_x.append(x)
-            curve_y.append(y)
-        else:
-            # Once y drops below min_edge, we've reached the end
-            # Add the final point where curve meets y = min_edge
-            x_at_min = max_area / min_edge
-            if x_at_min <= 150:
-                curve_x.append(x_at_min)
-                curve_y.append(min_edge)
-            break
-    
-    # Check if we need to continue along the max_edge limit
-    if curve_y[-1] >= max_edge - 1:
-        # We hit the edge limit, continue to the right along max_edge
-        last_x = curve_x[-1]
-        if last_x < max_edge:
-            curve_x.append(max_edge)
-            curve_y.append(max_edge)
-    
-    # From the end of the curve, drop down to the x-axis
-    if curve_x:
-        last_x = curve_x[-1]
-        curve_x.append(last_x)
-        curve_y.append(0)
-    
-    # Close the polygon back to origin
-    curve_x.append(0)
-    curve_y.append(0)
-    
-    return curve_x, curve_y
-
-def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech_param1, tech_param2, is_annealed):
+def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech_param1, tech_param2, is_annealed, core_area=None, tech_area=None):
     """Add custom size point to plot"""
     custom_width, custom_height = custom_point
     area_sqft = (custom_width * custom_height) / 144
@@ -682,10 +626,18 @@ def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech
         in_tech = (area_sqin <= tech_param2 and max_dim <= tech_param1 and meets_min)
         in_core = (area_sqin <= core_param2 and max_dim <= core_param1 and meets_min)
     else:
-        in_tech = ((custom_width <= tech_param1 and custom_height <= tech_param2) or 
-                  (custom_width <= tech_param2 and custom_height <= tech_param1)) and meets_min
-        in_core = ((custom_width <= core_param1 and custom_height <= core_param2) or 
-                  (custom_width <= core_param2 and custom_height <= core_param1)) and meets_min
+        # Tempered glass - check both dimensional and area constraints
+        in_tech_dims = ((custom_width <= tech_param1 and custom_height <= tech_param2) or 
+                       (custom_width <= tech_param2 and custom_height <= tech_param1)) and meets_min
+        in_core_dims = ((custom_width <= core_param1 and custom_height <= core_param2) or 
+                       (custom_width <= core_param2 and custom_height <= core_param1)) and meets_min
+        
+        # Check area constraints if provided
+        in_tech_area = area_sqin <= tech_area if tech_area else True
+        in_core_area = area_sqin <= core_area if core_area else True
+        
+        in_tech = in_tech_dims and in_tech_area
+        in_core = in_core_dims and in_core_area
     
     if in_core:
         marker_color, status_text = 'rgb(0, 200, 0)', "✓ Within Standard Sizing"
@@ -872,10 +824,26 @@ def main():
                 meets_min = (custom_width >= 16 or custom_height >= 16)
                 
                 if glass_type == "Tempered":
-                    in_tech = ((custom_width <= tech_long_max and custom_height <= tech_short_max) or 
-                              (custom_width <= tech_short_max and custom_height <= tech_long_max)) and meets_min
-                    in_core = ((custom_width <= core_long_max and custom_height <= core_short_max) or 
-                              (custom_width <= core_short_max and custom_height <= core_long_max)) and meets_min
+                    # Get area constraints for validation
+                    if show_all_configs:
+                        core_area = filtered_df['CoreRange_MaxArea_squarefeet'].max() * 144
+                        tech_area = filtered_df['Technical_limit_MaxArea_squarefeet'].max() * 144
+                    else:
+                        core_area = filtered_df['CoreRange_MaxArea_squarefeet'].values[0] * 144
+                        tech_area = filtered_df['Technical_limit_MaxArea_squarefeet'].values[0] * 144
+                    
+                    area_sqin = custom_width * custom_height
+                    
+                    in_tech_dims = ((custom_width <= tech_long_max and custom_height <= tech_short_max) or 
+                                   (custom_width <= tech_short_max and custom_height <= tech_long_max)) and meets_min
+                    in_core_dims = ((custom_width <= core_long_max and custom_height <= core_short_max) or 
+                                   (custom_width <= core_short_max and custom_height <= core_long_max)) and meets_min
+                    
+                    in_tech_area = area_sqin <= tech_area
+                    in_core_area = area_sqin <= core_area
+                    
+                    in_tech = in_tech_dims and in_tech_area
+                    in_core = in_core_dims and in_core_area
                 else:
                     area_sqin = custom_width * custom_height
                     max_dim = max(custom_width, custom_height)
