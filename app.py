@@ -23,8 +23,8 @@ This interactive tool helps you determine if your window dimensions fit within A
 - **Annealed Glass**: Shows curved envelopes based on maximum area and maximum edge length (Sizing based on wind load of DP30. Contact your sales rep if higher wind loads needed in your situation)
 
 **Understanding the Visualization:**
-- **Core Range** (blue): Efficient, low-cost production range
-- **Technical Limit** (orange): Maximum physically achievable size (may require special order and longer lead time)
+- **Standard Sizing** (blue): Efficient, low-cost production range
+- **Semi- or Full-Custom Range** (orange): Maximum physically achievable size (may require special order and longer lead time)
 - **Minimum Size**: At least one edge must be 16" or greater
 - **White areas**: Do not meet minimum size requirements
 
@@ -37,7 +37,7 @@ This interactive tool helps you determine if your window dimensions fit within A
 2. Use the dropdowns to filter by glass specifications (or leave as "All")
 3. Enter your desired width and height in the custom size input fields
 4. A star will appear on the chart showing your size's location
-5. Check the status indicator to see if it falls within Core Range, Technical Limit, or outside our capabilities
+5. Check the status indicator to see if it falls within Standard Sizing, Semi- or Full-Custom Range, or outside our capabilities
 
 **Interpreting the Chart:**
 - Hover over any point to see exact dimensions and area
@@ -55,6 +55,7 @@ def load_data():
     
     possible_names = [
         'AlpenGlass max sizing data.xlsx',
+        'AlpenGlass max sizing data 1.xlsx',
         'AlpenGlass_max_sizing_data.xlsx',
         'alpenglass_max_sizing_data.xlsx',
     ]
@@ -113,10 +114,10 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             
             if in_core:
                 Z[i, j] = 2
-                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>Core Range</b>")
+                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>Standard Sizing</b>")
             elif in_tech:
                 Z[i, j] = 1
-                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>⚠️ Technical Limit</b>")
+                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>⚠️ Semi- or Full-Custom Range</b>")
             else:
                 Z[i, j] = 0
                 if not meets_min:
@@ -139,10 +140,10 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
         x=tech_x, y=tech_y, fill='toself',
         fillcolor='rgba(255, 152, 0, 0.2)',
         line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
-        name='Technical Limit', hoverinfo='skip'
+        name='Semi- or Full-Custom Range', hoverinfo='skip'
     ))
     
-    # Add labels for Technical Limit corners
+    # Add labels for Semi- or Full-Custom Range corners
     tech_labels = [
         (tech_long, tech_short, f"{tech_long}\" × {tech_short}\"\n{(tech_long * tech_short / 144):.1f} sq ft"),
         (tech_short, tech_long, f"{tech_short}\" × {tech_long}\"\n{(tech_short * tech_long / 144):.1f} sq ft"),
@@ -176,7 +177,7 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
         fig.add_trace(go.Scatter(
             x=all_x, y=all_y, fill='toself',
             fillcolor='rgba(33, 150, 243, 0.3)', line=dict(width=0),
-            name='Core Range', hoverinfo='skip'
+            name='Standard Sizing', hoverinfo='skip'
         ))
     else:
         core_x = [min_edge, core_long, core_long, core_short, core_short, 0, 0, min_edge, min_edge]
@@ -185,10 +186,10 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             x=core_x, y=core_y, fill='toself',
             fillcolor='rgba(33, 150, 243, 0.3)',
             line=dict(color='rgba(33, 150, 243, 1)', width=3),
-            name='Core Range', hoverinfo='skip'
+            name='Standard Sizing', hoverinfo='skip'
         ))
     
-    # Add labels for Core Range corners
+    # Add labels for Standard Sizing corners
     core_labels = [
         (core_long, core_short, f"{core_long}\" × {core_short}\"\n{(core_long * core_short / 144):.1f} sq ft"),
         (core_short, core_long, f"{core_short}\" × {core_long}\"\n{(core_short * core_long / 144):.1f} sq ft"),
@@ -266,10 +267,10 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
             
             if in_core:
                 Z[i, j] = 2
-                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>Core Range</b>")
+                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>Standard Sizing</b>")
             elif in_tech:
                 Z[i, j] = 1
-                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>⚠️ Technical Limit</b>")
+                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>⚠️ Semi- or Full-Custom Range</b>")
             else:
                 Z[i, j] = 0
                 if not meets_min:
@@ -285,17 +286,17 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
         hovertemplate='%{text}<extra></extra>'
     ))
     
-    # Technical limit curve - FIXED to fill below the curve
+    # Semi- or Full-Custom Range curve
     tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area)
     
     fig.add_trace(go.Scatter(
         x=tech_curve_x, y=tech_curve_y, fill='toself',
         fillcolor='rgba(255, 152, 0, 0.2)',
         line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
-        name='Technical Limit', hoverinfo='skip'
+        name='Semi- or Full-Custom Range', hoverinfo='skip'
     ))
     
-    # Add labels for Technical Limit key points
+    # Add labels for Semi- or Full-Custom Range key points
     tech_key_points = get_annealed_label_points(min_edge, tech_max_edge, tech_max_area)
     for x, y, label in tech_key_points:
         fig.add_trace(go.Scatter(
@@ -309,17 +310,17 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
             hoverinfo='skip'
         ))
     
-    # Core range curve - FIXED to fill below the curve
+    # Standard Sizing curve
     core_curve_x, core_curve_y = generate_annealed_curve(min_edge, core_max_edge, core_max_area)
     
     fig.add_trace(go.Scatter(
         x=core_curve_x, y=core_curve_y, fill='toself',
         fillcolor='rgba(33, 150, 243, 0.3)',
         line=dict(color='rgba(33, 150, 243, 1)', width=3),
-        name='Core Range', hoverinfo='skip'
+        name='Standard Sizing', hoverinfo='skip'
     ))
     
-    # Add labels for Core Range key points
+    # Add labels for Standard Sizing key points
     core_key_points = get_annealed_label_points(min_edge, core_max_edge, core_max_area)
     for x, y, label in core_key_points:
         fig.add_trace(go.Scatter(
@@ -471,9 +472,9 @@ def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech
                   (custom_width <= core_param2 and custom_height <= core_param1)) and meets_min
     
     if in_core:
-        marker_color, status_text = 'rgb(0, 200, 0)', "✓ Within Core Range"
+        marker_color, status_text = 'rgb(0, 200, 0)', "✓ Within Standard Sizing"
     elif in_tech:
-        marker_color, status_text = 'rgb(255, 165, 0)', "⚠ Within Technical Limit"
+        marker_color, status_text = 'rgb(255, 165, 0)', "⚠ Within Semi- or Full-Custom Range"
     elif not meets_min:
         marker_color, status_text = 'rgb(255, 0, 0)', "✗ Below Minimum Size"
     else:
@@ -608,10 +609,10 @@ def main():
                     tech_long_max = filtered_df['Technical_limit_longedge_inches'].values[0]
                     tech_short_max = filtered_df['Technical_limit_shortedge_inches'].values[0]
                 
-                st.markdown("**Core Range**")
+                st.markdown("**Standard Sizing**")
                 st.info(f"Max Long Edge: **{core_long_max}\"**\nMax Short Edge: **{core_short_max}\"**")
                 
-                st.markdown("**Technical Limit**")
+                st.markdown("**Semi- or Full-Custom Range**")
                 st.warning(f"Max Long Edge: **{tech_long_max}\"**\nMax Short Edge: **{tech_short_max}\"**")
             
             else:  # Annealed
@@ -626,10 +627,10 @@ def main():
                     core_max_area = filtered_df['MaxArea_AspectRatioLessThanTwo_squarefeet'].values[0]
                     tech_max_area = filtered_df['MaxArea_AspectRatioLessThanTwo_squarefeet'].values[0]
                 
-                st.markdown("**Core Range**")
+                st.markdown("**Standard Sizing**")
                 st.info(f"Max Edge: **{core_max_edge}\"**\nMax Area: **{core_max_area} sq ft**")
                 
-                st.markdown("**Technical Limit**")
+                st.markdown("**Semi- or Full-Custom Range**")
                 st.warning(f"Max Edge: **{tech_max_edge}\"**\nMax Area: **{tech_max_area} sq ft**")
             
             st.markdown("**Minimum Size**")
@@ -654,9 +655,9 @@ def main():
                     in_core = (area_sqin <= core_max_area * 144 and max_dim <= core_max_edge and meets_min)
                 
                 if in_core:
-                    st.success("✓ **Within Core Range** - Standard pricing and lead time")
+                    st.success("✓ **Within Standard Sizing** - Standard pricing and lead time")
                 elif in_tech:
-                    st.warning("⚠ **Within Technical Limit** - May require special order and longer lead time")
+                    st.warning("⚠ **Within Semi- or Full-Custom Range** - May require special order and longer lead time")
                 elif not meets_min:
                     st.error("✗ **Below Minimum Size** - At least one edge must be 16\" or greater")
                 else:
