@@ -99,6 +99,7 @@ def load_data():
     import os
     
     possible_names = [
+        'AlpenGlass max sizing data v2.xlsx',
         'AlpenGlass max sizing data.xlsx',
         'AlpenGlass max sizing data 1.xlsx',
         'AlpenGlass_max_sizing_data.xlsx',
