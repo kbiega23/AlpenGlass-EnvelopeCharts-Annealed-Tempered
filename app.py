@@ -193,29 +193,85 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
         hovertemplate='%{text}<extra></extra>'
     ))
     
-    # Plot all technical limit tiers (in reverse order so tier 1 is on top)
+    # Plot technical limit - combine all tiers into one continuous envelope
     tech_labels = []
-    for idx, (tech_long, tech_short) in enumerate(reversed(tech_tiers)):
+    
+    if len(tech_tiers) == 1:
+        # Single tier - plot as before
+        tech_long, tech_short = tech_tiers[0]
         tech_x = [min_edge, tech_long, tech_long, tech_short, tech_short, 0, 0, min_edge, min_edge]
         tech_y = [0, 0, tech_short, tech_short, tech_long, tech_long, min_edge, min_edge, 0]
-        
-        # Only show legend for first (main) tier
-        show_legend = (idx == len(tech_tiers) - 1)
         
         fig.add_trace(go.Scatter(
             x=tech_x, y=tech_y, fill='toself',
             fillcolor='rgba(255, 152, 0, 0.2)',
             line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
-            name='Semi- or Full-Custom Range' if show_legend else '',
-            showlegend=show_legend,
+            name='Semi- or Full-Custom Range',
             hoverinfo='skip'
         ))
         
-        # Add labels for this tier's corners
         tech_labels.extend([
             (tech_long, tech_short, f"{tech_long}\" × {tech_short}\"\n{(tech_long * tech_short / 144):.1f} sq ft"),
             (tech_short, tech_long, f"{tech_short}\" × {tech_long}\"\n{(tech_short * tech_long / 144):.1f} sq ft"),
         ])
+    else:
+        # Multiple tiers - create unified envelope by tracing outer boundary
+        # Sort tiers by long edge descending to build the step pattern
+        sorted_tiers = sorted(tech_tiers, key=lambda t: t[0], reverse=True)
+        
+        tech_x, tech_y = [min_edge], [0]
+        
+        # Trace right edge (going up in steps)
+        for i, (long_edge, short_edge) in enumerate(sorted_tiers):
+            tech_x.append(long_edge)
+            tech_y.append(tech_y[-1])  # Stay at same height
+            tech_x.append(long_edge)
+            tech_y.append(short_edge)  # Go up
+            
+            # Add label for this corner
+            tech_labels.append((long_edge, short_edge, f"{long_edge}\" × {short_edge}\"\n{(long_edge * short_edge / 144):.1f} sq ft"))
+            
+            # Step inward to next tier if not the last one
+            if i < len(sorted_tiers) - 1:
+                next_short = sorted_tiers[i + 1][1]
+                tech_x.append(next_short)
+                tech_y.append(short_edge)
+        
+        # Trace top edge (going left in steps)
+        for i, (long_edge, short_edge) in enumerate(sorted_tiers):
+            if i == 0:
+                # Go up to the portrait orientation of first tier
+                tech_x.append(short_edge)
+                tech_y.append(short_edge)
+                tech_x.append(short_edge)
+                tech_y.append(long_edge)
+                
+                # Add label for this corner
+                tech_labels.append((short_edge, long_edge, f"{short_edge}\" × {long_edge}\"\n{(short_edge * long_edge / 144):.1f} sq ft"))
+            
+            # Step inward if there's another tier
+            if i < len(sorted_tiers) - 1:
+                next_short = sorted_tiers[i + 1][1]
+                tech_x.append(next_short)
+                tech_y.append(long_edge)
+                next_long = sorted_tiers[i + 1][0]
+                tech_x.append(next_short)
+                tech_y.append(next_long)
+                
+                # Add label for this corner
+                tech_labels.append((next_short, next_long, f"{next_short}\" × {next_long}\"\n{(next_short * next_long / 144):.1f} sq ft"))
+        
+        # Complete the envelope back to start
+        tech_x.extend([0, 0, min_edge, min_edge])
+        tech_y.extend([tech_y[-1], min_edge, min_edge, 0])
+        
+        fig.add_trace(go.Scatter(
+            x=tech_x, y=tech_y, fill='toself',
+            fillcolor='rgba(255, 152, 0, 0.2)',
+            line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
+            name='Semi- or Full-Custom Range',
+            hoverinfo='skip'
+        ))
     
     # Add labels for technical limit corners
     for x, y, label in tech_labels:
@@ -265,29 +321,78 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             name='Standard Sizing', hoverinfo='skip'
         ))
     else:
-        # Single configuration view - plot each tier separately (in reverse order)
+        # Single configuration view - combine all core tiers into one envelope
         core_labels = []
-        for idx, (core_long, core_short) in enumerate(reversed(core_tiers)):
+        
+        if len(core_tiers) == 1:
+            # Single tier - plot as before
+            core_long, core_short = core_tiers[0]
             core_x = [min_edge, core_long, core_long, core_short, core_short, 0, 0, min_edge, min_edge]
             core_y = [0, 0, core_short, core_short, core_long, core_long, min_edge, min_edge, 0]
-            
-            # Only show legend for first (main) tier
-            show_legend = (idx == len(core_tiers) - 1)
             
             fig.add_trace(go.Scatter(
                 x=core_x, y=core_y, fill='toself',
                 fillcolor='rgba(33, 150, 243, 0.3)',
                 line=dict(color='rgba(33, 150, 243, 1)', width=3),
-                name='Standard Sizing' if show_legend else '',
-                showlegend=show_legend,
+                name='Standard Sizing',
                 hoverinfo='skip'
             ))
             
-            # Add labels for this tier's corners
             core_labels.extend([
                 (core_long, core_short, f"{core_long}\" × {core_short}\"\n{(core_long * core_short / 144):.1f} sq ft"),
                 (core_short, core_long, f"{core_short}\" × {core_long}\"\n{(core_short * core_long / 144):.1f} sq ft"),
             ])
+        else:
+            # Multiple tiers - create unified envelope
+            sorted_tiers = sorted(core_tiers, key=lambda t: t[0], reverse=True)
+            
+            core_x, core_y = [min_edge], [0]
+            
+            # Trace right edge
+            for i, (long_edge, short_edge) in enumerate(sorted_tiers):
+                core_x.append(long_edge)
+                core_y.append(core_y[-1])
+                core_x.append(long_edge)
+                core_y.append(short_edge)
+                
+                core_labels.append((long_edge, short_edge, f"{long_edge}\" × {short_edge}\"\n{(long_edge * short_edge / 144):.1f} sq ft"))
+                
+                if i < len(sorted_tiers) - 1:
+                    next_short = sorted_tiers[i + 1][1]
+                    core_x.append(next_short)
+                    core_y.append(short_edge)
+            
+            # Trace top edge
+            for i, (long_edge, short_edge) in enumerate(sorted_tiers):
+                if i == 0:
+                    core_x.append(short_edge)
+                    core_y.append(short_edge)
+                    core_x.append(short_edge)
+                    core_y.append(long_edge)
+                    
+                    core_labels.append((short_edge, long_edge, f"{short_edge}\" × {long_edge}\"\n{(short_edge * long_edge / 144):.1f} sq ft"))
+                
+                if i < len(sorted_tiers) - 1:
+                    next_short = sorted_tiers[i + 1][1]
+                    core_x.append(next_short)
+                    core_y.append(long_edge)
+                    next_long = sorted_tiers[i + 1][0]
+                    core_x.append(next_short)
+                    core_y.append(next_long)
+                    
+                    core_labels.append((next_short, next_long, f"{next_short}\" × {next_long}\"\n{(next_short * next_long / 144):.1f} sq ft"))
+            
+            # Complete the envelope
+            core_x.extend([0, 0, min_edge, min_edge])
+            core_y.extend([core_y[-1], min_edge, min_edge, 0])
+            
+            fig.add_trace(go.Scatter(
+                x=core_x, y=core_y, fill='toself',
+                fillcolor='rgba(33, 150, 243, 0.3)',
+                line=dict(color='rgba(33, 150, 243, 1)', width=3),
+                name='Standard Sizing',
+                hoverinfo='skip'
+            ))
         
         # Add labels for core range corners
         for x, y, label in core_labels:
