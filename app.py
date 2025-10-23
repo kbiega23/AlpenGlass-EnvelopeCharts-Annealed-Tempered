@@ -406,7 +406,7 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             ))
     
     if custom_point:
-        add_custom_point(fig, custom_point, min_edge, core_tiers, tech_tiers, False)
+        add_custom_point(fig, custom_point, min_edge, core_tiers, None, tech_tiers, None, False)
     
     title_text = "AlpenGlass Sizing Limits - Tempered Glass"
     if filter_text:
@@ -423,6 +423,107 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
                    font=dict(size=12), bgcolor="rgba(255,255,255,0.9)", bordercolor="rgba(0,0,0,0.3)", borderwidth=1)
     )
     return fig
+
+def generate_annealed_curve(min_edge, max_edge, max_area):
+    """
+    Generate the curve for annealed glass that fills BELOW the constraint curve.
+    The minimum size exclusion only applies to the bottom-left corner (0-16 x 0-16).
+    Returns x and y coordinates for the polygon.
+    """
+    curve_x = []
+    curve_y = []
+    
+    # Start at origin (0, 0)
+    curve_x.append(0)
+    curve_y.append(0)
+    
+    # Go right to min_edge along bottom
+    curve_x.append(min_edge)
+    curve_y.append(0)
+    
+    # Go up to min_edge corner (this creates the excluded bottom-left square)
+    curve_x.append(min_edge)
+    curve_y.append(min_edge)
+    
+    # Go left back to y-axis at min_edge height
+    curve_x.append(0)
+    curve_y.append(min_edge)
+    
+    # Now trace up the y-axis following the area constraint
+    # Find where the hyperbola intersects the y-axis (x approaching 0)
+    # For very small x values, y = max_area / x, capped at max_edge
+    y_at_yaxis = min(max_edge, 150)
+    
+    # Go up the y-axis to the top of the constraint
+    curve_x.append(0)
+    curve_y.append(y_at_yaxis)
+    
+    # Trace the constraint curve from left (y-axis) to right
+    # Start from x = small value and increase
+    for x in range(1, min(int(max_edge) + 1, 151)):
+        y = min(max_area / x, max_edge, 150)
+        if y >= min_edge:
+            curve_x.append(x)
+            curve_y.append(y)
+        else:
+            # Once y drops below min_edge, we've reached the end
+            # Add the final point where curve meets y = min_edge
+            x_at_min = max_area / min_edge
+            if x_at_min <= 150:
+                curve_x.append(x_at_min)
+                curve_y.append(min_edge)
+            break
+    
+    # Check if we need to continue along the max_edge limit
+    if curve_y[-1] >= max_edge - 1:
+        # We hit the edge limit, continue to the right along max_edge
+        last_x = curve_x[-1]
+        if last_x < max_edge:
+            curve_x.append(max_edge)
+            curve_y.append(max_edge)
+    
+    # From the end of the curve, drop down to the x-axis
+    if curve_x:
+        last_x = curve_x[-1]
+        curve_x.append(last_x)
+        curve_y.append(0)
+    
+    # Close the polygon back to origin
+    curve_x.append(0)
+    curve_y.append(0)
+    
+    return curve_x, curve_y
+
+def get_annealed_label_points(min_edge, max_edge, max_area):
+    """
+    Get key points to label on annealed glass curves.
+    Returns list of (x, y, label) tuples for key boundary points.
+    Labels where the hyperbolic curve intersects y=max_edge and x=max_edge boundaries.
+    """
+    label_points = []
+    
+    # Point 1: Where the hyperbolic curve intersects the horizontal line y = max_edge
+    # This is the transition point where the curve bends from horizontal to hyperbolic
+    # It occurs at x = max_area / max_edge
+    x_transition = max_area / max_edge
+    
+    if x_transition >= min_edge and x_transition <= 150:
+        y_transition = max_edge
+        area_sqft = (x_transition * y_transition) / 144
+        label = f"{x_transition:.0f}\" × {y_transition:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_transition, y_transition, label))
+    
+    # Point 2: Where the hyperbolic curve intersects the vertical line x = max_edge
+    # At x = max_edge, y = min(max_area / max_edge, max_edge)
+    x_at_max = max_edge
+    y_at_max = min(max_area / x_at_max, max_edge)
+    
+    if y_at_max >= min_edge and x_at_max <= 150:
+        area_sqft = (x_at_max * y_at_max) / 144
+        label = f"{x_at_max:.0f}\" × {y_at_max:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_at_max, y_at_max, label))
+    
+    return label_points
 
 def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_df=None, custom_point=None, filter_text=""):
     """Create plotly figure for annealed glass with area constraints"""
@@ -483,38 +584,8 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
         hovertemplate='%{text}<extra></extra>'
     ))
     
-    # Technical limit curve
-    tech_curve_x, tech_curve_y = [], []
-    
-    # Start from min_edge on x-axis, trace the hyperbolic curve
-    for x in range(min_edge, min(int(tech_max_edge) + 1, 151)):
-        y = min(tech_max_area / x, tech_max_edge, 150)
-        if y >= min_edge:
-            tech_curve_x.append(x)
-            tech_curve_y.append(y)
-    
-    # If we hit the max edge limit, continue along that line
-    if tech_curve_x and tech_curve_y[-1] >= min_edge:
-        # Go up the right edge to max_edge
-        last_x = tech_curve_x[-1]
-        for y in range(int(tech_curve_y[-1]), min(int(tech_max_edge) + 1, 151)):
-            tech_curve_x.append(last_x)
-            tech_curve_y.append(y)
-        
-        # Go left along the top edge
-        for x in range(int(last_x) - 1, min_edge - 1, -1):
-            tech_curve_x.append(x)
-            tech_curve_y.append(tech_max_edge)
-        
-        # Go down the left edge back to where hyperbola meets it
-        final_y = min(tech_max_area / min_edge, tech_max_edge)
-        for y in range(int(tech_max_edge), int(final_y), -1):
-            tech_curve_x.append(min_edge)
-            tech_curve_y.append(y)
-    
-    # Close the shape
-    tech_curve_x.extend([min_edge, min_edge, 0, 0, min_edge])
-    tech_curve_y.extend([min_edge, 0, 0, min_edge, min_edge])
+    # Semi- or Full-Custom Range curve
+    tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area)
     
     fig.add_trace(go.Scatter(
         x=tech_curve_x, y=tech_curve_y, fill='toself',
@@ -523,38 +594,22 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
         name='Semi- or Full-Custom Range', hoverinfo='skip'
     ))
     
-    # Core range curve
-    core_curve_x, core_curve_y = [], []
+    # Add labels for Semi- or Full-Custom Range key points
+    tech_key_points = get_annealed_label_points(min_edge, tech_max_edge, tech_max_area)
+    for x, y, label in tech_key_points:
+        fig.add_trace(go.Scatter(
+            x=[x], y=[y],
+            mode='markers+text',
+            marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
+            text=[label],
+            textposition='top center',
+            textfont=dict(size=10, color='rgb(204, 102, 0)', family='Arial'),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
     
-    # Start from min_edge on x-axis, trace the hyperbolic curve
-    for x in range(min_edge, min(int(core_max_edge) + 1, 151)):
-        y = min(core_max_area / x, core_max_edge, 150)
-        if y >= min_edge:
-            core_curve_x.append(x)
-            core_curve_y.append(y)
-    
-    # If we hit the max edge limit, continue along that line
-    if core_curve_x and core_curve_y[-1] >= min_edge:
-        # Go up the right edge to max_edge
-        last_x = core_curve_x[-1]
-        for y in range(int(core_curve_y[-1]), min(int(core_max_edge) + 1, 151)):
-            core_curve_x.append(last_x)
-            core_curve_y.append(y)
-        
-        # Go left along the top edge
-        for x in range(int(last_x) - 1, min_edge - 1, -1):
-            core_curve_x.append(x)
-            core_curve_y.append(core_max_edge)
-        
-        # Go down the left edge back to where hyperbola meets it
-        final_y = min(core_max_area / min_edge, core_max_edge)
-        for y in range(int(core_max_edge), int(final_y), -1):
-            core_curve_x.append(min_edge)
-            core_curve_y.append(y)
-    
-    # Close the shape
-    core_curve_x.extend([min_edge, min_edge, 0, 0, min_edge])
-    core_curve_y.extend([min_edge, 0, 0, min_edge, min_edge])
+    # Standard Sizing curve
+    core_curve_x, core_curve_y = generate_annealed_curve(min_edge, core_max_edge, core_max_area)
     
     fig.add_trace(go.Scatter(
         x=core_curve_x, y=core_curve_y, fill='toself',
@@ -563,8 +618,22 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
         name='Standard Sizing', hoverinfo='skip'
     ))
     
+    # Add labels for Standard Sizing key points
+    core_key_points = get_annealed_label_points(min_edge, core_max_edge, core_max_area)
+    for x, y, label in core_key_points:
+        fig.add_trace(go.Scatter(
+            x=[x], y=[y],
+            mode='markers+text',
+            marker=dict(size=8, color='rgba(33, 150, 243, 0.9)', symbol='circle'),
+            text=[label],
+            textposition='bottom center',
+            textfont=dict(size=10, color='rgb(21, 101, 192)', family='Arial'),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+    
     if custom_point:
-        add_custom_point(fig, custom_point, min_edge, (core_max_edge, core_max_area), (tech_max_edge, tech_max_area), True)
+        add_custom_point(fig, custom_point, min_edge, core_max_edge, core_max_area, tech_max_edge, tech_max_area, True)
     
     title_text = "AlpenGlass Sizing Limits - Annealed Glass"
     if filter_text:
@@ -582,7 +651,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     )
     return fig
 
-def add_custom_point(fig, custom_point, min_edge, core_param, tech_param, is_annealed):
+def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech_param1, tech_param2, is_annealed):
     """Add custom size point to plot"""
     custom_width, custom_height = custom_point
     area_sqft = (custom_width * custom_height) / 144
@@ -590,16 +659,15 @@ def add_custom_point(fig, custom_point, min_edge, core_param, tech_param, is_ann
     meets_min = (custom_width >= min_edge or custom_height >= min_edge)
     
     if is_annealed:
-        # For annealed: core_param=(max_edge, max_area), tech_param=(max_edge, max_area)
-        core_max_edge, core_max_area = core_param
-        tech_max_edge, tech_max_area = tech_param
+        # For annealed: core_param1=max_edge, core_param2=max_area, tech_param1=max_edge, tech_param2=max_area
         max_dim = max(custom_width, custom_height)
-        in_tech = (area_sqin <= tech_max_area and max_dim <= tech_max_edge and meets_min)
-        in_core = (area_sqin <= core_max_area and max_dim <= core_max_edge and meets_min)
+        in_tech = (area_sqin <= tech_param2 and max_dim <= tech_param1 and meets_min)
+        in_core = (area_sqin <= core_param2 and max_dim <= core_param1 and meets_min)
     else:
-        # For tempered: core_param=list of (long,short) tuples, tech_param=list of (long,short) tuples
-        core_tiers = core_param
-        tech_tiers = tech_param
+        # For tempered: core_param1=list of (long,short) tuples, core_param2=tech tiers (not used separately)
+        # tech_param1=list of (long,short) tuples, tech_param2 not used
+        core_tiers = core_param1
+        tech_tiers = tech_param1
         
         in_tech = False
         for tech_long, tech_short in tech_tiers:
