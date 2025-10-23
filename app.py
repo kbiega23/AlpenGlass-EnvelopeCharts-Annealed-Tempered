@@ -77,21 +77,66 @@ def load_data():
     return None, None
 
 def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_df=None, custom_point=None, filter_text=""):
-    """Create plotly figure for tempered glass"""
+    """Create plotly figure for tempered glass with multi-tier support"""
     
     if config_data.empty:
         return None
     
+    # Collect all tiers for plotting
     if show_all and all_configs_df is not None and not all_configs_df.empty:
+        # For "All" view, get max dimensions across all configs and all tiers
+        core_tiers = []
+        tech_tiers = []
+        
+        # Tier 1 (primary)
         core_long = all_configs_df['CoreRange_ maxlongedge_inches'].max()
         core_short = all_configs_df['CoreRange_maxshortedge_inches'].max()
         tech_long = all_configs_df['Technical_limit_longedge_inches'].max()
         tech_short = all_configs_df['Technical_limit_shortedge_inches'].max()
+        
+        core_tiers.append((core_long, core_short))
+        tech_tiers.append((tech_long, tech_short))
+        
+        # Tier 2 (if exists)
+        if 'CoreRange_ maxlongedge_inches_tier2' in all_configs_df.columns:
+            tier2_core = all_configs_df[all_configs_df['CoreRange_ maxlongedge_inches_tier2'].notna()]
+            if not tier2_core.empty:
+                core_long_t2 = tier2_core['CoreRange_ maxlongedge_inches_tier2'].max()
+                core_short_t2 = tier2_core['CoreRange_maxshortedge_inches_tier2'].max()
+                core_tiers.append((core_long_t2, core_short_t2))
+        
+        if 'Technical_limit_longedge_inches_tier2' in all_configs_df.columns:
+            tier2_tech = all_configs_df[all_configs_df['Technical_limit_longedge_inches_tier2'].notna()]
+            if not tier2_tech.empty:
+                tech_long_t2 = tier2_tech['Technical_limit_longedge_inches_tier2'].max()
+                tech_short_t2 = tier2_tech['Technical_limit_shortedge_inches_tier2'].max()
+                tech_tiers.append((tech_long_t2, tech_short_t2))
     else:
+        # Single configuration view
+        core_tiers = []
+        tech_tiers = []
+        
+        # Tier 1 (primary)
         core_long = config_data['CoreRange_ maxlongedge_inches'].values[0]
         core_short = config_data['CoreRange_maxshortedge_inches'].values[0]
         tech_long = config_data['Technical_limit_longedge_inches'].values[0]
         tech_short = config_data['Technical_limit_shortedge_inches'].values[0]
+        
+        core_tiers.append((core_long, core_short))
+        tech_tiers.append((tech_long, tech_short))
+        
+        # Tier 2 (if exists)
+        if 'CoreRange_ maxlongedge_inches_tier2' in config_data.columns:
+            if pd.notna(config_data['CoreRange_ maxlongedge_inches_tier2'].values[0]):
+                core_long_t2 = config_data['CoreRange_ maxlongedge_inches_tier2'].values[0]
+                core_short_t2 = config_data['CoreRange_maxshortedge_inches_tier2'].values[0]
+                core_tiers.append((core_long_t2, core_short_t2))
+        
+        if 'Technical_limit_longedge_inches_tier2' in config_data.columns:
+            if pd.notna(config_data['Technical_limit_longedge_inches_tier2'].values[0]):
+                tech_long_t2 = config_data['Technical_limit_longedge_inches_tier2'].values[0]
+                tech_short_t2 = config_data['Technical_limit_shortedge_inches_tier2'].values[0]
+                tech_tiers.append((tech_long_t2, tech_short_t2))
     
     fig = go.Figure()
     
@@ -108,10 +153,22 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             x, y = X[i, j], Y[i, j]
             
             meets_min = (x >= min_edge or y >= min_edge)
-            in_tech = ((x <= tech_long and y <= tech_short) or 
-                      (x <= tech_short and y <= tech_long)) and meets_min
-            in_core = ((x <= core_long and y <= core_short) or 
-                      (x <= core_short and y <= core_long)) and meets_min
+            
+            # Check if point is in any technical tier
+            in_tech = False
+            for tech_long, tech_short in tech_tiers:
+                if ((x <= tech_long and y <= tech_short) or 
+                    (x <= tech_short and y <= tech_long)) and meets_min:
+                    in_tech = True
+                    break
+            
+            # Check if point is in any core tier
+            in_core = False
+            for core_long, core_short in core_tiers:
+                if ((x <= core_long and y <= core_short) or 
+                    (x <= core_short and y <= core_long)) and meets_min:
+                    in_core = True
+                    break
             
             area_sqft = (x * y) / 144
             
@@ -136,43 +193,68 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
         hovertemplate='%{text}<extra></extra>'
     ))
     
-    tech_x = [min_edge, tech_long, tech_long, tech_short, tech_short, 0, 0, min_edge, min_edge]
-    tech_y = [0, 0, tech_short, tech_short, tech_long, tech_long, min_edge, min_edge, 0]
+    # Plot all technical limit tiers (in reverse order so tier 1 is on top)
+    tech_labels = []
+    for idx, (tech_long, tech_short) in enumerate(reversed(tech_tiers)):
+        tech_x = [min_edge, tech_long, tech_long, tech_short, tech_short, 0, 0, min_edge, min_edge]
+        tech_y = [0, 0, tech_short, tech_short, tech_long, tech_long, min_edge, min_edge, 0]
+        
+        # Only show legend for first (main) tier
+        show_legend = (idx == len(tech_tiers) - 1)
+        
+        fig.add_trace(go.Scatter(
+            x=tech_x, y=tech_y, fill='toself',
+            fillcolor='rgba(255, 152, 0, 0.2)',
+            line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
+            name='Semi- or Full-Custom Range' if show_legend else '',
+            showlegend=show_legend,
+            hoverinfo='skip'
+        ))
+        
+        # Add labels for this tier's corners
+        tech_labels.extend([
+            (tech_long, tech_short, f"{tech_long}\" × {tech_short}\"\n{(tech_long * tech_short / 144):.1f} sq ft"),
+            (tech_short, tech_long, f"{tech_short}\" × {tech_long}\"\n{(tech_short * tech_long / 144):.1f} sq ft"),
+        ])
     
-    fig.add_trace(go.Scatter(
-        x=tech_x, y=tech_y, fill='toself',
-        fillcolor='rgba(255, 152, 0, 0.2)',
-        line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
-        name='Semi- or Full-Custom Range', hoverinfo='skip'
-    ))
-    
-    # Add labels for Semi- or Full-Custom Range corners
-    tech_labels = [
-        (tech_long, tech_short, f"{tech_long}\" × {tech_short}\"\n{(tech_long * tech_short / 144):.1f} sq ft"),
-        (tech_short, tech_long, f"{tech_short}\" × {tech_long}\"\n{(tech_short * tech_long / 144):.1f} sq ft"),
-    ]
-    
+    # Add labels for technical limit corners
     for x, y, label in tech_labels:
         fig.add_trace(go.Scatter(
             x=[x], y=[y],
             mode='markers+text',
             marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
             text=[label],
-            textposition='top center',
-            textfont=dict(size=10, color='rgb(204, 102, 0)', family='Arial'),
+            textposition="top center",
+            textfont=dict(size=10, color='rgba(255, 152, 0, 1)'),
             showlegend=False,
             hoverinfo='skip'
         ))
     
+    # Plot all core range tiers
     if show_all and all_configs_df is not None and not all_configs_df.empty:
+        # For "All" view, plot all individual rectangles with transparency
         all_x, all_y = [], []
         for idx, row in all_configs_df.iterrows():
+            # Tier 1
             c_long = row['CoreRange_ maxlongedge_inches']
             c_short = row['CoreRange_maxshortedge_inches']
             rect_x = [min_edge, c_long, c_long, c_short, c_short, 0, 0, min_edge, min_edge]
             rect_y = [0, 0, c_short, c_short, c_long, c_long, min_edge, min_edge, 0]
             all_x.extend(rect_x)
             all_y.extend(rect_y)
+            
+            # Add tier 2 if exists
+            if 'CoreRange_ maxlongedge_inches_tier2' in row.index:
+                if pd.notna(row['CoreRange_ maxlongedge_inches_tier2']):
+                    c_long_t2 = row['CoreRange_ maxlongedge_inches_tier2']
+                    c_short_t2 = row['CoreRange_maxshortedge_inches_tier2']
+                    all_x.append(None)
+                    all_y.append(None)
+                    rect_x_t2 = [min_edge, c_long_t2, c_long_t2, c_short_t2, c_short_t2, 0, 0, min_edge, min_edge]
+                    rect_y_t2 = [0, 0, c_short_t2, c_short_t2, c_long_t2, c_long_t2, min_edge, min_edge, 0]
+                    all_x.extend(rect_x_t2)
+                    all_y.extend(rect_y_t2)
+            
             if idx < len(all_configs_df) - 1:
                 all_x.append(None)
                 all_y.append(None)
@@ -183,35 +265,45 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             name='Standard Sizing', hoverinfo='skip'
         ))
     else:
-        core_x = [min_edge, core_long, core_long, core_short, core_short, 0, 0, min_edge, min_edge]
-        core_y = [0, 0, core_short, core_short, core_long, core_long, min_edge, min_edge, 0]
-        fig.add_trace(go.Scatter(
-            x=core_x, y=core_y, fill='toself',
-            fillcolor='rgba(33, 150, 243, 0.3)',
-            line=dict(color='rgba(33, 150, 243, 1)', width=3),
-            name='Standard Sizing', hoverinfo='skip'
-        ))
-    
-    # Add labels for Standard Sizing corners
-    core_labels = [
-        (core_long, core_short, f"{core_long}\" × {core_short}\"\n{(core_long * core_short / 144):.1f} sq ft"),
-        (core_short, core_long, f"{core_short}\" × {core_long}\"\n{(core_short * core_long / 144):.1f} sq ft"),
-    ]
-    
-    for x, y, label in core_labels:
-        fig.add_trace(go.Scatter(
-            x=[x], y=[y],
-            mode='markers+text',
-            marker=dict(size=8, color='rgba(33, 150, 243, 0.9)', symbol='circle'),
-            text=[label],
-            textposition='bottom center',
-            textfont=dict(size=10, color='rgb(21, 101, 192)', family='Arial'),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
+        # Single configuration view - plot each tier separately (in reverse order)
+        core_labels = []
+        for idx, (core_long, core_short) in enumerate(reversed(core_tiers)):
+            core_x = [min_edge, core_long, core_long, core_short, core_short, 0, 0, min_edge, min_edge]
+            core_y = [0, 0, core_short, core_short, core_long, core_long, min_edge, min_edge, 0]
+            
+            # Only show legend for first (main) tier
+            show_legend = (idx == len(core_tiers) - 1)
+            
+            fig.add_trace(go.Scatter(
+                x=core_x, y=core_y, fill='toself',
+                fillcolor='rgba(33, 150, 243, 0.3)',
+                line=dict(color='rgba(33, 150, 243, 1)', width=3),
+                name='Standard Sizing' if show_legend else '',
+                showlegend=show_legend,
+                hoverinfo='skip'
+            ))
+            
+            # Add labels for this tier's corners
+            core_labels.extend([
+                (core_long, core_short, f"{core_long}\" × {core_short}\"\n{(core_long * core_short / 144):.1f} sq ft"),
+                (core_short, core_long, f"{core_short}\" × {core_long}\"\n{(core_short * core_long / 144):.1f} sq ft"),
+            ])
+        
+        # Add labels for core range corners
+        for x, y, label in core_labels:
+            fig.add_trace(go.Scatter(
+                x=[x], y=[y],
+                mode='markers+text',
+                marker=dict(size=8, color='rgba(33, 150, 243, 0.9)', symbol='circle'),
+                text=[label],
+                textposition="top center",
+                textfont=dict(size=10, color='rgba(33, 150, 243, 1)'),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
     
     if custom_point:
-        add_custom_point(fig, custom_point, min_edge, core_long, core_short, tech_long, tech_short, False)
+        add_custom_point(fig, custom_point, min_edge, core_tiers, tech_tiers, False)
     
     title_text = "AlpenGlass Sizing Limits - Tempered Glass"
     if filter_text:
@@ -238,7 +330,6 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     if show_all and all_configs_df is not None and not all_configs_df.empty:
         core_max_edge = all_configs_df['CoreRange_maxedge_inches'].max()
         tech_max_edge = all_configs_df['Technical_limit_maxedge_inches'].max()
-        # Use the aspect ratio < 2 column for now (both columns have same values currently)
         core_max_area = all_configs_df['MaxArea_AspectRatioLessThanTwo_squarefeet'].max() * 144
         tech_max_area = all_configs_df['MaxArea_AspectRatioLessThanTwo_squarefeet'].max() * 144
     else:
@@ -289,8 +380,38 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
         hovertemplate='%{text}<extra></extra>'
     ))
     
-    # Semi- or Full-Custom Range curve
-    tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area)
+    # Technical limit curve
+    tech_curve_x, tech_curve_y = [], []
+    
+    # Start from min_edge on x-axis, trace the hyperbolic curve
+    for x in range(min_edge, min(int(tech_max_edge) + 1, 151)):
+        y = min(tech_max_area / x, tech_max_edge, 150)
+        if y >= min_edge:
+            tech_curve_x.append(x)
+            tech_curve_y.append(y)
+    
+    # If we hit the max edge limit, continue along that line
+    if tech_curve_x and tech_curve_y[-1] >= min_edge:
+        # Go up the right edge to max_edge
+        last_x = tech_curve_x[-1]
+        for y in range(int(tech_curve_y[-1]), min(int(tech_max_edge) + 1, 151)):
+            tech_curve_x.append(last_x)
+            tech_curve_y.append(y)
+        
+        # Go left along the top edge
+        for x in range(int(last_x) - 1, min_edge - 1, -1):
+            tech_curve_x.append(x)
+            tech_curve_y.append(tech_max_edge)
+        
+        # Go down the left edge back to where hyperbola meets it
+        final_y = min(tech_max_area / min_edge, tech_max_edge)
+        for y in range(int(tech_max_edge), int(final_y), -1):
+            tech_curve_x.append(min_edge)
+            tech_curve_y.append(y)
+    
+    # Close the shape
+    tech_curve_x.extend([min_edge, min_edge, 0, 0, min_edge])
+    tech_curve_y.extend([min_edge, 0, 0, min_edge, min_edge])
     
     fig.add_trace(go.Scatter(
         x=tech_curve_x, y=tech_curve_y, fill='toself',
@@ -299,22 +420,38 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
         name='Semi- or Full-Custom Range', hoverinfo='skip'
     ))
     
-    # Add labels for Semi- or Full-Custom Range key points
-    tech_key_points = get_annealed_label_points(min_edge, tech_max_edge, tech_max_area)
-    for x, y, label in tech_key_points:
-        fig.add_trace(go.Scatter(
-            x=[x], y=[y],
-            mode='markers+text',
-            marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
-            text=[label],
-            textposition='top center',
-            textfont=dict(size=10, color='rgb(204, 102, 0)', family='Arial'),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
+    # Core range curve
+    core_curve_x, core_curve_y = [], []
     
-    # Standard Sizing curve
-    core_curve_x, core_curve_y = generate_annealed_curve(min_edge, core_max_edge, core_max_area)
+    # Start from min_edge on x-axis, trace the hyperbolic curve
+    for x in range(min_edge, min(int(core_max_edge) + 1, 151)):
+        y = min(core_max_area / x, core_max_edge, 150)
+        if y >= min_edge:
+            core_curve_x.append(x)
+            core_curve_y.append(y)
+    
+    # If we hit the max edge limit, continue along that line
+    if core_curve_x and core_curve_y[-1] >= min_edge:
+        # Go up the right edge to max_edge
+        last_x = core_curve_x[-1]
+        for y in range(int(core_curve_y[-1]), min(int(core_max_edge) + 1, 151)):
+            core_curve_x.append(last_x)
+            core_curve_y.append(y)
+        
+        # Go left along the top edge
+        for x in range(int(last_x) - 1, min_edge - 1, -1):
+            core_curve_x.append(x)
+            core_curve_y.append(core_max_edge)
+        
+        # Go down the left edge back to where hyperbola meets it
+        final_y = min(core_max_area / min_edge, core_max_edge)
+        for y in range(int(core_max_edge), int(final_y), -1):
+            core_curve_x.append(min_edge)
+            core_curve_y.append(y)
+    
+    # Close the shape
+    core_curve_x.extend([min_edge, min_edge, 0, 0, min_edge])
+    core_curve_y.extend([min_edge, 0, 0, min_edge, min_edge])
     
     fig.add_trace(go.Scatter(
         x=core_curve_x, y=core_curve_y, fill='toself',
@@ -323,22 +460,8 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
         name='Standard Sizing', hoverinfo='skip'
     ))
     
-    # Add labels for Standard Sizing key points
-    core_key_points = get_annealed_label_points(min_edge, core_max_edge, core_max_area)
-    for x, y, label in core_key_points:
-        fig.add_trace(go.Scatter(
-            x=[x], y=[y],
-            mode='markers+text',
-            marker=dict(size=8, color='rgba(33, 150, 243, 0.9)', symbol='circle'),
-            text=[label],
-            textposition='bottom center',
-            textfont=dict(size=10, color='rgb(21, 101, 192)', family='Arial'),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
-    
     if custom_point:
-        add_custom_point(fig, custom_point, min_edge, core_max_edge, core_max_area, tech_max_edge, tech_max_area, True)
+        add_custom_point(fig, custom_point, min_edge, [(core_max_edge, core_max_area)], [(tech_max_edge, tech_max_area)], True)
     
     title_text = "AlpenGlass Sizing Limits - Annealed Glass"
     if filter_text:
@@ -356,123 +479,43 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     )
     return fig
 
-def get_annealed_label_points(min_edge, max_edge, max_area):
-    """
-    Get key points to label on annealed glass curves.
-    Returns list of (x, y, label) tuples for key boundary points.
-    Labels where the hyperbolic curve intersects y=max_edge and x=max_edge boundaries.
-    """
-    label_points = []
-    
-    # Point 1: Where the hyperbolic curve intersects the horizontal line y = max_edge
-    # This is the transition point where the curve bends from horizontal to hyperbolic
-    # It occurs at x = max_area / max_edge
-    x_transition = max_area / max_edge
-    
-    if x_transition >= min_edge and x_transition <= 150:
-        y_transition = max_edge
-        area_sqft = (x_transition * y_transition) / 144
-        label = f"{x_transition:.0f}\" × {y_transition:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_transition, y_transition, label))
-    
-    # Point 2: Where the hyperbolic curve intersects the vertical line x = max_edge
-    # At x = max_edge, y = min(max_area / max_edge, max_edge)
-    x_at_max = max_edge
-    y_at_max = min(max_area / x_at_max, max_edge)
-    
-    if y_at_max >= min_edge and x_at_max <= 150:
-        area_sqft = (x_at_max * y_at_max) / 144
-        label = f"{x_at_max:.0f}\" × {y_at_max:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_at_max, y_at_max, label))
-    
-    return label_points
-
-def generate_annealed_curve(min_edge, max_edge, max_area):
-    """
-    Generate the curve for annealed glass that fills BELOW the constraint curve.
-    The minimum size exclusion only applies to the bottom-left corner (0-16 x 0-16).
-    Returns x and y coordinates for the polygon.
-    """
-    curve_x = []
-    curve_y = []
-    
-    # Start at origin (0, 0)
-    curve_x.append(0)
-    curve_y.append(0)
-    
-    # Go right to min_edge along bottom
-    curve_x.append(min_edge)
-    curve_y.append(0)
-    
-    # Go up to min_edge corner (this creates the excluded bottom-left square)
-    curve_x.append(min_edge)
-    curve_y.append(min_edge)
-    
-    # Go left back to y-axis at min_edge height
-    curve_x.append(0)
-    curve_y.append(min_edge)
-    
-    # Now trace up the y-axis following the area constraint
-    # Find where the hyperbola intersects the y-axis (x approaching 0)
-    # For very small x values, y = max_area / x, capped at max_edge
-    y_at_yaxis = min(max_edge, 150)
-    
-    # Go up the y-axis to the top of the constraint
-    curve_x.append(0)
-    curve_y.append(y_at_yaxis)
-    
-    # Trace the constraint curve from left (y-axis) to right
-    # Start from x = small value and increase
-    for x in range(1, min(int(max_edge) + 1, 151)):
-        y = min(max_area / x, max_edge, 150)
-        if y >= min_edge:
-            curve_x.append(x)
-            curve_y.append(y)
-        else:
-            # Once y drops below min_edge, we've reached the end
-            # Add the final point where curve meets y = min_edge
-            x_at_min = max_area / min_edge
-            if x_at_min <= 150:
-                curve_x.append(x_at_min)
-                curve_y.append(min_edge)
-            break
-    
-    # Check if we need to continue along the max_edge limit
-    if curve_y[-1] >= max_edge - 1:
-        # We hit the edge limit, continue to the right along max_edge
-        last_x = curve_x[-1]
-        if last_x < max_edge:
-            curve_x.append(max_edge)
-            curve_y.append(max_edge)
-    
-    # From the end of the curve, drop down to the x-axis
-    if curve_x:
-        last_x = curve_x[-1]
-        curve_x.append(last_x)
-        curve_y.append(0)
-    
-    # Close the polygon back to origin
-    curve_x.append(0)
-    curve_y.append(0)
-    
-    return curve_x, curve_y
-
-def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech_param1, tech_param2, is_annealed):
-    """Add custom size point to plot"""
+def add_custom_point(fig, custom_point, min_edge, core_tiers, tech_tiers, is_annealed):
+    """Add custom size point to plot with multi-tier support"""
     custom_width, custom_height = custom_point
     area_sqft = (custom_width * custom_height) / 144
     area_sqin = custom_width * custom_height
     meets_min = (custom_width >= min_edge or custom_height >= min_edge)
     
     if is_annealed:
+        # For annealed, tiers contain (max_edge, max_area) tuples
         max_dim = max(custom_width, custom_height)
-        in_tech = (area_sqin <= tech_param2 and max_dim <= tech_param1 and meets_min)
-        in_core = (area_sqin <= core_param2 and max_dim <= core_param1 and meets_min)
+        
+        in_tech = False
+        for tech_max_edge, tech_max_area in tech_tiers:
+            if (area_sqin <= tech_max_area and max_dim <= tech_max_edge and meets_min):
+                in_tech = True
+                break
+        
+        in_core = False
+        for core_max_edge, core_max_area in core_tiers:
+            if (area_sqin <= core_max_area and max_dim <= core_max_edge and meets_min):
+                in_core = True
+                break
     else:
-        in_tech = ((custom_width <= tech_param1 and custom_height <= tech_param2) or 
-                  (custom_width <= tech_param2 and custom_height <= tech_param1)) and meets_min
-        in_core = ((custom_width <= core_param1 and custom_height <= core_param2) or 
-                  (custom_width <= core_param2 and custom_height <= core_param1)) and meets_min
+        # For tempered, tiers contain (long_edge, short_edge) tuples
+        in_tech = False
+        for tech_long, tech_short in tech_tiers:
+            if ((custom_width <= tech_long and custom_height <= tech_short) or 
+                (custom_width <= tech_short and custom_height <= tech_long)) and meets_min:
+                in_tech = True
+                break
+        
+        in_core = False
+        for core_long, core_short in core_tiers:
+            if ((custom_width <= core_long and custom_height <= core_short) or 
+                (custom_width <= core_short and custom_height <= core_long)) and meets_min:
+                in_core = True
+                break
     
     if in_core:
         marker_color, status_text = 'rgb(0, 200, 0)', "✓ Within Standard Sizing"
@@ -659,10 +702,37 @@ def main():
                 meets_min = (custom_width >= 16 or custom_height >= 16)
                 
                 if glass_type == "Tempered":
-                    in_tech = ((custom_width <= tech_long_max and custom_height <= tech_short_max) or 
-                              (custom_width <= tech_short_max and custom_height <= tech_long_max)) and meets_min
-                    in_core = ((custom_width <= core_long_max and custom_height <= core_short_max) or 
-                              (custom_width <= core_short_max and custom_height <= core_long_max)) and meets_min
+                    # Check against all tiers for tempered glass
+                    in_tech = False
+                    in_core = False
+                    
+                    # Check tier 1
+                    if ((custom_width <= tech_long_max and custom_height <= tech_short_max) or 
+                        (custom_width <= tech_short_max and custom_height <= tech_long_max)) and meets_min:
+                        in_tech = True
+                    
+                    if ((custom_width <= core_long_max and custom_height <= core_short_max) or 
+                        (custom_width <= core_short_max and custom_height <= core_long_max)) and meets_min:
+                        in_core = True
+                    
+                    # Check tier 2 if exists
+                    if not in_tech and 'Technical_limit_longedge_inches_tier2' in filtered_df.columns:
+                        tier2_data = filtered_df[filtered_df['Technical_limit_longedge_inches_tier2'].notna()]
+                        if not tier2_data.empty:
+                            tech_long_t2 = tier2_data['Technical_limit_longedge_inches_tier2'].values[0]
+                            tech_short_t2 = tier2_data['Technical_limit_shortedge_inches_tier2'].values[0]
+                            if ((custom_width <= tech_long_t2 and custom_height <= tech_short_t2) or 
+                                (custom_width <= tech_short_t2 and custom_height <= tech_long_t2)) and meets_min:
+                                in_tech = True
+                    
+                    if not in_core and 'CoreRange_ maxlongedge_inches_tier2' in filtered_df.columns:
+                        tier2_data = filtered_df[filtered_df['CoreRange_ maxlongedge_inches_tier2'].notna()]
+                        if not tier2_data.empty:
+                            core_long_t2 = tier2_data['CoreRange_ maxlongedge_inches_tier2'].values[0]
+                            core_short_t2 = tier2_data['CoreRange_maxshortedge_inches_tier2'].values[0]
+                            if ((custom_width <= core_long_t2 and custom_height <= core_short_t2) or 
+                                (custom_width <= core_short_t2 and custom_height <= core_long_t2)) and meets_min:
+                                in_core = True
                 else:
                     area_sqin = custom_width * custom_height
                     max_dim = max(custom_width, custom_height)
