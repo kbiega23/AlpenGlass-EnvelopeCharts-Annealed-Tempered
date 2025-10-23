@@ -564,7 +564,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     ))
     
     if custom_point:
-        add_custom_point(fig, custom_point, min_edge, [(core_max_edge, core_max_area)], [(tech_max_edge, tech_max_area)], True)
+        add_custom_point(fig, custom_point, min_edge, (core_max_edge, core_max_area), (tech_max_edge, tech_max_area), True)
     
     title_text = "AlpenGlass Sizing Limits - Annealed Glass"
     if filter_text:
@@ -582,30 +582,25 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     )
     return fig
 
-def add_custom_point(fig, custom_point, min_edge, core_tiers, tech_tiers, is_annealed):
-    """Add custom size point to plot with multi-tier support"""
+def add_custom_point(fig, custom_point, min_edge, core_param, tech_param, is_annealed):
+    """Add custom size point to plot"""
     custom_width, custom_height = custom_point
     area_sqft = (custom_width * custom_height) / 144
     area_sqin = custom_width * custom_height
     meets_min = (custom_width >= min_edge or custom_height >= min_edge)
     
     if is_annealed:
-        # For annealed, tiers contain (max_edge, max_area) tuples
+        # For annealed: core_param=(max_edge, max_area), tech_param=(max_edge, max_area)
+        core_max_edge, core_max_area = core_param
+        tech_max_edge, tech_max_area = tech_param
         max_dim = max(custom_width, custom_height)
-        
-        in_tech = False
-        for tech_max_edge, tech_max_area in tech_tiers:
-            if (area_sqin <= tech_max_area and max_dim <= tech_max_edge and meets_min):
-                in_tech = True
-                break
-        
-        in_core = False
-        for core_max_edge, core_max_area in core_tiers:
-            if (area_sqin <= core_max_area and max_dim <= core_max_edge and meets_min):
-                in_core = True
-                break
+        in_tech = (area_sqin <= tech_max_area and max_dim <= tech_max_edge and meets_min)
+        in_core = (area_sqin <= core_max_area and max_dim <= core_max_edge and meets_min)
     else:
-        # For tempered, tiers contain (long_edge, short_edge) tuples
+        # For tempered: core_param=list of (long,short) tuples, tech_param=list of (long,short) tuples
+        core_tiers = core_param
+        tech_tiers = tech_param
+        
         in_tech = False
         for tech_long, tech_short in tech_tiers:
             if ((custom_width <= tech_long and custom_height <= tech_short) or 
