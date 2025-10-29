@@ -85,83 +85,50 @@ def compute_envelope(rectangles, min_edge):
     if not rectangles:
         return [], []
     
-    # Collect all critical y-values where the boundary might change
-    y_values = set([0, min_edge])
-    for long_edge, short_edge in rectangles:
-        y_values.add(short_edge)
-        y_values.add(long_edge)
-    
-    y_sorted = sorted(y_values)
-    
-    # For each y-level, compute the maximum x value achievable
-    max_x_at_y = {}
-    for y in y_sorted:
+    # Function to compute max x at any y level
+    def max_x_at_y(y):
         max_x = 0
         for long_edge, short_edge in rectangles:
-            # Check if this rectangle extends to this y level
-            if y <= short_edge:
+            if y <= short_edge:  # Landscape: can reach long_edge
                 max_x = max(max_x, long_edge)
-            if y <= long_edge:
+            if y <= long_edge:  # Portrait: can reach short_edge
                 max_x = max(max_x, short_edge)
-        max_x_at_y[y] = max_x
+        return max_x
     
-    # Build the envelope path clockwise from origin
-    envelope_x = []
-    envelope_y = []
+    # Sample at integer y values and track where max_x changes
+    boundary_points = []
+    prev_x = None
     
-    # Start at origin
-    envelope_x.append(0)
-    envelope_y.append(0)
-    
-    # Go right along x-axis to where we start meeting the min_edge requirement
-    envelope_x.append(min_edge)
-    envelope_y.append(0)
-    
-    # Trace the right side going upward (stepped pattern)
-    for i, y in enumerate(y_sorted):
-        if y == 0:
-            continue  # Already handled
+    for y in range(0, 151):
+        curr_x = max_x_at_y(y)
         
-        x = max_x_at_y[y]
-        
-        # Check if we need to step out or in
-        prev_y = y_sorted[i-1] if i > 0 else 0
-        prev_x = max_x_at_y[prev_y]
-        
-        if y >= min_edge or x >= min_edge:  # Must meet minimum requirement
-            if x != prev_x:
-                # Horizontal step
+        # Only record points where x changes OR at critical boundaries
+        if curr_x != prev_x:
+            boundary_points.append((curr_x, y))
+            prev_x = curr_x
+    
+    # Build stepped envelope
+    envelope_x = [0, min_edge]
+    envelope_y = [0, 0]
+    
+    prev_y = 0
+    for x, y in boundary_points:
+        # Only add if x > 0 and meets minimum requirements
+        if x > 0 and (x >= min_edge or y >= min_edge):
+            # Add corner (horizontal step)
+            if len(envelope_x) > 2:  # Skip first point
                 envelope_x.append(x)
                 envelope_y.append(prev_y)
-            # Vertical step
+            # Add vertical step
             envelope_x.append(x)
             envelope_y.append(y)
+            prev_y = y
     
-    # Now we're at the top-right. Get the maximum y we reached
-    if envelope_y:
-        max_y_reached = envelope_y[-1]
-    else:
-        max_y_reached = min_edge
+    # Complete polygon
+    max_y = envelope_y[-1] if len(envelope_y) > 2 else min_edge
     
-    # Go left to the y-axis at maximum height
-    envelope_x.append(0)
-    envelope_y.append(max_y_reached)
-    
-    # Go down the y-axis to min_edge
-    envelope_x.append(0)
-    envelope_y.append(min_edge)
-    
-    # Go right to complete the minimum size exclusion box
-    envelope_x.append(min_edge)
-    envelope_y.append(min_edge)
-    
-    # Go down to x-axis
-    envelope_x.append(min_edge)
-    envelope_y.append(0)
-    
-    # Close back to origin
-    envelope_x.append(0)
-    envelope_y.append(0)
+    envelope_x.extend([0, 0, min_edge, min_edge, 0])
+    envelope_y.extend([max_y, min_edge, min_edge, 0, 0])
     
     return envelope_x, envelope_y
 
