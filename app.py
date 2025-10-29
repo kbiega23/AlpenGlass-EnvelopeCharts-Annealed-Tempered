@@ -81,54 +81,81 @@ def compute_envelope(rectangles, min_edge):
     Compute the outer envelope (boundary) of a set of rectangles.
     Each rectangle is defined as (long_edge, short_edge).
     Returns x, y coordinates for the outer perimeter traced clockwise from origin.
+    Expected path: (0,16), (16,16), (16,0), then clockwise around envelope, back to (0,16)
     """
     if not rectangles:
         return [], []
     
-    # Function to compute max x at any y level
+    # Function to compute max x at any y level  
     def max_x_at_y(y):
         max_x = 0
         for long_edge, short_edge in rectangles:
-            if y <= short_edge:  # Landscape: can reach long_edge
+            if y <= short_edge:  # Landscape
                 max_x = max(max_x, long_edge)
-            if y <= long_edge:  # Portrait: can reach short_edge
+            if y <= long_edge:  # Portrait
                 max_x = max(max_x, short_edge)
         return max_x
     
-    # Sample at integer y values and track where max_x changes
-    boundary_points = []
-    prev_x = None
+    # Get all unique y-coordinates where boundaries change
+    y_values = set([0])
+    for long_edge, short_edge in rectangles:
+        y_values.add(short_edge)
+        y_values.add(long_edge)
+    y_values = sorted([y for y in y_values if y <= 150])
     
-    for y in range(0, 151):
-        curr_x = max_x_at_y(y)
-        
-        # Only record points where x changes OR at critical boundaries
-        if curr_x != prev_x:
-            boundary_points.append((curr_x, y))
-            prev_x = curr_x
+    # For each y range, determine max_x by sampling in the middle
+    ranges = []
+    for i in range(len(y_values) - 1):
+        y_start = y_values[i]
+        y_end = y_values[i + 1]
+        # Sample in the middle of this range
+        y_sample = y_start + 0.5
+        x = max_x_at_y(y_sample)
+        if x > 0:
+            ranges.append((x, y_start, y_end))
     
-    # Build stepped envelope
-    envelope_x = [0, min_edge]
-    envelope_y = [0, 0]
+    # Handle the last range (from last y_value to max)
+    if y_values:
+        y_start = y_values[-1]
+        y_sample = y_start + 0.5
+        x = max_x_at_y(y_sample)
+        if x > 0:
+            max_y_overall = max(long for long, short in rectangles)
+            ranges.append((x, y_start, max_y_overall))
     
-    prev_y = 0
-    for x, y in boundary_points:
-        # Only add if x > 0 and meets minimum requirements
-        if x > 0 and (x >= min_edge or y >= min_edge):
-            # Add corner (horizontal step)
-            if len(envelope_x) > 2:  # Skip first point
+    # Build envelope path starting from (0, min_edge)
+    envelope_x = [0, min_edge, min_edge]
+    envelope_y = [min_edge, min_edge, 0]
+    
+    # Trace the right and top edges
+    for i, (x, y_start, y_end) in enumerate(ranges):
+        if x >= min_edge or y_end >= min_edge:
+            if i == 0:
+                # First range - go right along x-axis then up
                 envelope_x.append(x)
-                envelope_y.append(prev_y)
-            # Add vertical step
-            envelope_x.append(x)
-            envelope_y.append(y)
-            prev_y = y
+                envelope_y.append(0)
+                envelope_x.append(x)
+                envelope_y.append(y_end)
+            else:
+                prev_x = ranges[i-1][0]
+                if x != prev_x:
+                    # Step: go up to y_start at prev_x, then left/right to new x
+                    envelope_x.append(x)
+                    envelope_y.append(y_start)
+                
+                # Go up to end of this range
+                envelope_x.append(x)
+                envelope_y.append(y_end)
     
-    # Complete polygon
-    max_y = envelope_y[-1] if len(envelope_y) > 2 else min_edge
+    # Complete polygon back to start
+    max_y = envelope_y[-1] if len(envelope_y) > 3 else min_edge
     
-    envelope_x.extend([0, 0, min_edge, min_edge, 0])
-    envelope_y.extend([max_y, min_edge, min_edge, 0, 0])
+    # Go left to y-axis at max_y, then down to min_edge
+    envelope_x.append(0)
+    envelope_y.append(max_y)
+    
+    envelope_x.append(0)
+    envelope_y.append(min_edge)
     
     return envelope_x, envelope_y
 
