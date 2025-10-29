@@ -578,19 +578,15 @@ def generate_annealed_curve(min_edge, max_edge, max_area):
     curve_x = []
     curve_y = []
     
-    # Start at origin (0, 0)
-    curve_x.append(0)
-    curve_y.append(0)
-    
-    # Go right to min_edge along bottom
+    # Start at (min_edge, 0) to avoid drawing line through excluded region
     curve_x.append(min_edge)
     curve_y.append(0)
     
-    # Go up to min_edge corner (this creates the excluded bottom-left square)
+    # Go up to min_edge corner
     curve_x.append(min_edge)
     curve_y.append(min_edge)
     
-    # Go left back to y-axis at min_edge height
+    # Go left to y-axis at min_edge height
     curve_x.append(0)
     curve_y.append(min_edge)
     
@@ -639,8 +635,8 @@ def generate_annealed_curve(min_edge, max_edge, max_area):
         curve_x.append(last_x)
         curve_y.append(0)
     
-    # Close the polygon back to origin
-    curve_x.append(0)
+    # Close the polygon back to starting point (min_edge, 0)
+    curve_x.append(min_edge)
     curve_y.append(0)
     
     return curve_x, curve_y
