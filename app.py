@@ -569,10 +569,11 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
     )
     return fig
 
-def generate_annealed_curve(min_edge, max_edge, max_area):
+def generate_annealed_curve(min_edge, max_edge, max_area, max_short_edge=None):
     """
     Generate the curve for annealed glass that fills BELOW the constraint curve.
     The minimum size exclusion only applies to the bottom-left corner (0-16 x 0-16).
+    max_short_edge: optional constraint on the short edge (minimum dimension)
     Returns x and y coordinates for the polygon.
     """
     curve_x = []
@@ -598,6 +599,9 @@ def generate_annealed_curve(min_edge, max_edge, max_area):
     # Find where the hyperbola intersects the y-axis (x approaching 0)
     # For very small x values, y = max_area / x, capped at max_edge
     y_at_yaxis = min(max_edge, 150)
+    # Also check short edge constraint
+    if max_short_edge is not None:
+        y_at_yaxis = min(y_at_yaxis, max_short_edge)
     
     # Go up the y-axis to the top of the constraint
     curve_x.append(0)
@@ -607,6 +611,15 @@ def generate_annealed_curve(min_edge, max_edge, max_area):
     # Start from x = small value and increase
     for x in range(1, min(int(max_edge) + 1, 151)):
         y = min(max_area / x, max_edge, 150)
+        
+        # Apply short edge constraint (short edge is min(x, y))
+        if max_short_edge is not None:
+            if x <= y:  # x is short edge
+                if x > max_short_edge:
+                    break  # Can't go further
+            else:  # y is short edge
+                y = min(y, max_short_edge)
+        
         if y >= min_edge:
             curve_x.append(x)
             curve_y.append(y)
@@ -620,11 +633,16 @@ def generate_annealed_curve(min_edge, max_edge, max_area):
             break
     
     # Check if we need to continue along the max_edge limit
-    if curve_y[-1] >= max_edge - 1:
+    if curve_y and curve_y[-1] >= max_edge - 1:
         # We hit the edge limit, continue to the right along max_edge
         last_x = curve_x[-1]
-        if last_x < max_edge:
-            curve_x.append(max_edge)
+        # But respect short edge constraint
+        max_x_allowed = max_edge
+        if max_short_edge is not None:
+            max_x_allowed = min(max_x_allowed, max_short_edge)
+        
+        if last_x < max_x_allowed:
+            curve_x.append(max_x_allowed)
             curve_y.append(max_edge)
     
     # From the end of the curve, drop down to the x-axis
@@ -639,7 +657,7 @@ def generate_annealed_curve(min_edge, max_edge, max_area):
     
     return curve_x, curve_y
 
-def get_annealed_label_points(min_edge, max_edge, max_area):
+def get_annealed_label_points(min_edge, max_edge, max_area, max_short_edge=None):
     """
     Get key points to label on annealed glass curves.
     Returns list of (x, y, label) tuples for key boundary points.
@@ -652,6 +670,11 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
     # It occurs at x = max_area / max_edge
     x_transition = max_area / max_edge
     
+    # Check short edge constraint
+    if max_short_edge is not None:
+        if x_transition <= max_edge:  # x is short edge
+            x_transition = min(x_transition, max_short_edge)
+    
     if x_transition >= min_edge and x_transition <= 150:
         y_transition = max_edge
         area_sqft = (x_transition * y_transition) / 144
@@ -662,6 +685,14 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
     # At x = max_edge, y = min(max_area / max_edge, max_edge)
     x_at_max = max_edge
     y_at_max = min(max_area / x_at_max, max_edge)
+    
+    # Check short edge constraint
+    if max_short_edge is not None:
+        if x_at_max <= y_at_max:  # x is short edge
+            if x_at_max > max_short_edge:
+                return label_points  # Can't place this point
+        else:  # y is short edge
+            y_at_max = min(y_at_max, max_short_edge)
     
     if y_at_max >= min_edge and x_at_max <= 150:
         area_sqft = (x_at_max * y_at_max) / 144
@@ -681,11 +712,29 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
         tech_max_edge = all_configs_df['Technical_limit_maxedge_inches'].max()
         core_max_area = all_configs_df['MaxArea_AspectRatioLessThanTwo_squarefeet'].max() * 144
         tech_max_area = all_configs_df['MaxArea_AspectRatioLessThanTwo_squarefeet'].max() * 144
+        # Check if short edge constraint exists
+        core_max_short = all_configs_df['CoreRange_maxshortedge_inches'].max() if 'CoreRange_maxshortedge_inches' in all_configs_df.columns else None
+        tech_max_short = all_configs_df['Technical_limit_maxshortedge_inches'].max() if 'Technical_limit_maxshortedge_inches' in all_configs_df.columns else None
+        if pd.isna(core_max_short):
+            core_max_short = None
+        if pd.isna(tech_max_short):
+            tech_max_short = None
     else:
         core_max_edge = config_data['CoreRange_maxedge_inches'].values[0]
         tech_max_edge = config_data['Technical_limit_maxedge_inches'].values[0]
         core_max_area = config_data['MaxArea_AspectRatioLessThanTwo_squarefeet'].values[0] * 144
         tech_max_area = config_data['MaxArea_AspectRatioLessThanTwo_squarefeet'].values[0] * 144
+        # Check if short edge constraint exists
+        core_max_short = config_data['CoreRange_maxshortedge_inches'].values[0] if 'CoreRange_maxshortedge_inches' in config_data.columns else None
+        tech_max_short = config_data['Technical_limit_maxshortedge_inches'].values[0] if 'Technical_limit_maxshortedge_inches' in config_data.columns else None
+        if pd.notna(core_max_short):
+            core_max_short = float(core_max_short)
+        else:
+            core_max_short = None
+        if pd.notna(tech_max_short):
+            tech_max_short = float(tech_max_short)
+        else:
+            tech_max_short = None
     
     fig = go.Figure()
     
@@ -704,9 +753,17 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
             area_sqft = area_sqin / 144
             meets_min = (x >= min_edge or y >= min_edge)
             max_dim = max(x, y)
+            min_dim = min(x, y)  # Short edge
             
+            # Check technical limit constraints
             in_tech = (area_sqin <= tech_max_area and max_dim <= tech_max_edge and meets_min)
+            if tech_max_short is not None:
+                in_tech = in_tech and (min_dim <= tech_max_short)
+            
+            # Check core range constraints
             in_core = (area_sqin <= core_max_area and max_dim <= core_max_edge and meets_min)
+            if core_max_short is not None:
+                in_core = in_core and (min_dim <= core_max_short)
             
             if in_core:
                 Z[i, j] = 2
@@ -730,7 +787,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     ))
     
     # Semi- or Full-Custom Range curve
-    tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area)
+    tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area, tech_max_short)
     
     fig.add_trace(go.Scatter(
         x=tech_curve_x, y=tech_curve_y, fill='toself',
@@ -740,7 +797,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     ))
     
     # Add labels for Semi- or Full-Custom Range key points
-    tech_key_points = get_annealed_label_points(min_edge, tech_max_edge, tech_max_area)
+    tech_key_points = get_annealed_label_points(min_edge, tech_max_edge, tech_max_area, tech_max_short)
     for x, y, label in tech_key_points:
         fig.add_trace(go.Scatter(
             x=[x], y=[y],
@@ -754,7 +811,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
         ))
     
     # Standard Sizing curve
-    core_curve_x, core_curve_y = generate_annealed_curve(min_edge, core_max_edge, core_max_area)
+    core_curve_x, core_curve_y = generate_annealed_curve(min_edge, core_max_edge, core_max_area, core_max_short)
     
     fig.add_trace(go.Scatter(
         x=core_curve_x, y=core_curve_y, fill='toself',
@@ -764,7 +821,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     ))
     
     # Add labels for Standard Sizing key points
-    core_key_points = get_annealed_label_points(min_edge, core_max_edge, core_max_area)
+    core_key_points = get_annealed_label_points(min_edge, core_max_edge, core_max_area, core_max_short)
     for x, y, label in core_key_points:
         fig.add_trace(go.Scatter(
             x=[x], y=[y],
