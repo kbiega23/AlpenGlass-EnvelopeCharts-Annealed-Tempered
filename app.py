@@ -603,45 +603,42 @@ def generate_annealed_curve(min_edge, max_edge, max_area, max_short_edge=None):
     curve_x.append(0)
     curve_y.append(y_at_yaxis)
     
-    # Trace the constraint curve from left (y-axis) to right
-    # Determine the max x value to trace to
+    # Determine where the hyperbola intersects the max_edge horizontal line
+    # This is where x = max_area / max_edge
+    x_hyperbola_at_max_edge = max_area / max_edge
+    
+    # Determine the effective max x based on short edge constraint
     if max_short_edge is not None:
-        # If there's a short edge constraint, stop when x reaches max_short_edge
-        # (assuming the hyperbola keeps y >= x in this range, so x is the short edge)
-        max_x_to_trace = min(int(max_short_edge), int(max_edge))
+        effective_max_x = max_short_edge
     else:
-        max_x_to_trace = int(max_edge)
+        effective_max_x = max_edge
     
-    for x in range(1, min(max_x_to_trace + 1, 151)):
-        y = min(max_area / x, max_edge, 150)
+    # Check if hyperbola is the binding constraint or if max_edge dominates
+    if x_hyperbola_at_max_edge <= effective_max_x:
+        # Hyperbola is binding - trace the curved section
+        # From x=0, go along y=max_edge until we reach the hyperbola
+        curve_x.append(x_hyperbola_at_max_edge)
+        curve_y.append(max_edge)
         
-        if y >= min_edge:
-            curve_x.append(x)
-            curve_y.append(y)
-        else:
-            # Once y drops below min_edge, we've reached the end
-            # Add the final point where curve meets y = min_edge
-            x_at_min = max_area / min_edge
-            if x_at_min <= 150:
-                curve_x.append(x_at_min)
-                curve_y.append(min_edge)
-            break
-    
-    # Check if we need to continue along the max_edge limit
-    if curve_y and curve_y[-1] >= max_edge - 1:
-        # We hit the edge limit, continue to the right along max_edge if there's room
-        last_x = curve_x[-1]
-        
-        # Determine how far we can extend along the top edge
-        if max_short_edge is not None:
-            # With short edge constraint, we can only go to max_short_edge
-            max_x_allowed = max_short_edge
-        else:
-            max_x_allowed = max_edge
-        
-        if last_x < max_x_allowed:
-            curve_x.append(max_x_allowed)
-            curve_y.append(max_edge)
+        # Then trace the hyperbola from x_hyperbola_at_max_edge to effective_max_x
+        for x in range(int(x_hyperbola_at_max_edge) + 1, min(int(effective_max_x) + 1, 151)):
+            y = min(max_area / x, max_edge, 150)
+            
+            if y >= min_edge:
+                curve_x.append(x)
+                curve_y.append(y)
+            else:
+                # Once y drops below min_edge, add final point and stop
+                x_at_min = max_area / min_edge
+                if x_at_min <= 150:
+                    curve_x.append(x_at_min)
+                    curve_y.append(min_edge)
+                break
+    else:
+        # Max_edge dominates - create rectangular boundary
+        # Go horizontally along y=max_edge from x=0 to x=effective_max_x
+        curve_x.append(effective_max_x)
+        curve_y.append(max_edge)
     
     # From the end of the curve, drop down to the x-axis
     if curve_x:
