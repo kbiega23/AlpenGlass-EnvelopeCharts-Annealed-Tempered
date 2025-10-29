@@ -84,33 +84,38 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
     
     # Collect all tiers for plotting
     if show_all and all_configs_df is not None and not all_configs_df.empty:
-        # For "All" view, get max dimensions across all configs and all tiers
+        # For "All" view, collect ALL actual rectangles from ALL configurations
         core_tiers = []
         tech_tiers = []
         
-        # Tier 1 (primary)
-        core_long = all_configs_df['CoreRange_ maxlongedge_inches'].max()
-        core_short = all_configs_df['CoreRange_maxshortedge_inches'].max()
-        tech_long = all_configs_df['Technical_limit_longedge_inches'].max()
-        tech_short = all_configs_df['Technical_limit_shortedge_inches'].max()
-        
-        core_tiers.append((core_long, core_short))
-        tech_tiers.append((tech_long, tech_short))
-        
-        # Tier 2 (if exists)
-        if 'CoreRange_ maxlongedge_inches_tier2' in all_configs_df.columns:
-            tier2_core = all_configs_df[all_configs_df['CoreRange_ maxlongedge_inches_tier2'].notna()]
-            if not tier2_core.empty:
-                core_long_t2 = tier2_core['CoreRange_ maxlongedge_inches_tier2'].max()
-                core_short_t2 = tier2_core['CoreRange_maxshortedge_inches_tier2'].max()
-                core_tiers.append((core_long_t2, core_short_t2))
-        
-        if 'Technical_limit_longedge_inches_tier2' in all_configs_df.columns:
-            tier2_tech = all_configs_df[all_configs_df['Technical_limit_longedge_inches_tier2'].notna()]
-            if not tier2_tech.empty:
-                tech_long_t2 = tier2_tech['Technical_limit_longedge_inches_tier2'].max()
-                tech_short_t2 = tier2_tech['Technical_limit_shortedge_inches_tier2'].max()
-                tech_tiers.append((tech_long_t2, tech_short_t2))
+        for idx, row in all_configs_df.iterrows():
+            # Tier 1 from this config
+            core_long = row['CoreRange_ maxlongedge_inches']
+            core_short = row['CoreRange_maxshortedge_inches']
+            tech_long = row['Technical_limit_longedge_inches']
+            tech_short = row['Technical_limit_shortedge_inches']
+            
+            # Add tier1 rectangles if not already in list
+            core_tier1 = (core_long, core_short)
+            tech_tier1 = (tech_long, tech_short)
+            
+            if core_tier1 not in core_tiers:
+                core_tiers.append(core_tier1)
+            if tech_tier1 not in tech_tiers:
+                tech_tiers.append(tech_tier1)
+            
+            # Tier 2 if exists
+            if 'CoreRange_ maxlongedge_inches_tier2' in row.index:
+                if pd.notna(row['CoreRange_ maxlongedge_inches_tier2']):
+                    core_tier2 = (row['CoreRange_ maxlongedge_inches_tier2'], row['CoreRange_maxshortedge_inches_tier2'])
+                    if core_tier2 not in core_tiers:
+                        core_tiers.append(core_tier2)
+            
+            if 'Technical_limit_longedge_inches_tier2' in row.index:
+                if pd.notna(row['Technical_limit_longedge_inches_tier2']):
+                    tech_tier2 = (row['Technical_limit_longedge_inches_tier2'], row['Technical_limit_shortedge_inches_tier2'])
+                    if tech_tier2 not in tech_tiers:
+                        tech_tiers.append(tech_tier2)
     else:
         # Single configuration view
         core_tiers = []
@@ -193,207 +198,95 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
         hovertemplate='%{text}<extra></extra>'
     ))
     
-    # Plot technical limit - combine all tiers into one continuous envelope
+    # Plot technical limit - plot all rectangles individually
     tech_labels = []
     
-    if len(tech_tiers) == 1:
-        # Single tier - plot as before
-        tech_long, tech_short = tech_tiers[0]
-        tech_x = [min_edge, tech_long, tech_long, tech_short, tech_short, 0, 0, min_edge, min_edge]
-        tech_y = [0, 0, tech_short, tech_short, tech_long, tech_long, min_edge, min_edge, 0]
+    # Plot each technical tier rectangle
+    tech_all_x = []
+    tech_all_y = []
+    
+    for idx, (tech_long, tech_short) in enumerate(tech_tiers):
+        rect_x = [min_edge, tech_long, tech_long, tech_short, tech_short, 0, 0, min_edge, min_edge]
+        rect_y = [0, 0, tech_short, tech_short, tech_long, tech_long, min_edge, min_edge, 0]
         
-        fig.add_trace(go.Scatter(
-            x=tech_x, y=tech_y, fill='toself',
-            fillcolor='rgba(255, 152, 0, 0.2)',
-            line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
-            name='Semi- or Full-Custom Range',
-            hoverinfo='skip'
-        ))
+        tech_all_x.extend(rect_x)
+        tech_all_y.extend(rect_y)
         
+        # Add separator between rectangles (None creates a break in the line)
+        if idx < len(tech_tiers) - 1:
+            tech_all_x.append(None)
+            tech_all_y.append(None)
+        
+        # Add labels for corners
         tech_labels.extend([
             (tech_long, tech_short, f"{tech_long}\" × {tech_short}\"\n{(tech_long * tech_short / 144):.1f} sq ft"),
             (tech_short, tech_long, f"{tech_short}\" × {tech_long}\"\n{(tech_short * tech_long / 144):.1f} sq ft"),
         ])
-    else:
-        # Multiple tiers - create unified envelope
-        # For 2 tiers: tier1 (e.g., 120×72) and tier2 (e.g., 98×88)
-        tier1_long, tier1_short = tech_tiers[0]
-        tier2_long, tier2_short = tech_tiers[1]
+    
+    # Plot all technical rectangles as one trace
+    fig.add_trace(go.Scatter(
+        x=tech_all_x, y=tech_all_y, fill='toself',
+        fillcolor='rgba(255, 152, 0, 0.2)',
+        line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
+        name='Semi- or Full-Custom Range',
+        hoverinfo='skip'
+    ))
+    
+    # Add labels for technical limit corners (deduplicate if needed)
+    seen_labels = set()
+    for x, y, label in tech_labels:
+        label_key = (x, y)
+        if label_key not in seen_labels:
+            seen_labels.add(label_key)
+            fig.add_trace(go.Scatter(
+                x=[x], y=[y],
+                mode='markers+text',
+                marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
+                text=[label],
+                textposition="top center",
+                textfont=dict(size=10, color='rgba(255, 152, 0, 1)'),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
+    
+    # Plot core range - plot all rectangles individually
+    core_labels = []
+    core_all_x = []
+    core_all_y = []
+    
+    for idx, (core_long, core_short) in enumerate(core_tiers):
+        rect_x = [min_edge, core_long, core_long, core_short, core_short, 0, 0, min_edge, min_edge]
+        rect_y = [0, 0, core_short, core_short, core_long, core_long, min_edge, min_edge, 0]
         
-        # Build the stepped envelope clockwise from bottom-left
-        tech_x = [
-            min_edge,       # Start
-            tier1_long,     # Right to tier1 landscape max
-            tier1_long,     # Up
-            tier2_long,     # Left step to tier2 long edge
-            tier2_long,     # Up to tier2 landscape corner
-            tier2_short,    # Left to tier2 short edge
-            tier2_short,    # Up to tier2 portrait corner
-            tier1_short,    # Left step to tier1 short edge
-            tier1_short,    # Up to tier1 portrait max
-            0,              # Left to axis
-            0,              # Down
-            min_edge,       # Right
-            min_edge        # Close
-        ]
+        core_all_x.extend(rect_x)
+        core_all_y.extend(rect_y)
         
-        tech_y = [
-            0,              # Start
-            0,              # Right
-            tier1_short,    # Up to tier1 landscape corner
-            tier1_short,    # Left step
-            tier2_short,    # Up to tier2 landscape corner
-            tier2_short,    # Left
-            tier2_long,     # Up to tier2 portrait corner
-            tier2_long,     # Left step
-            tier1_long,     # Up to tier1 portrait max
-            tier1_long,     # Left
-            min_edge,       # Down
-            min_edge,       # Right
-            0               # Close
-        ]
+        # Add separator between rectangles
+        if idx < len(core_tiers) - 1:
+            core_all_x.append(None)
+            core_all_y.append(None)
         
-        fig.add_trace(go.Scatter(
-            x=tech_x, y=tech_y, fill='toself',
-            fillcolor='rgba(255, 152, 0, 0.2)',
-            line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
-            name='Semi- or Full-Custom Range',
-            hoverinfo='skip'
-        ))
-        
-        # Add labels for all four corners
-        tech_labels.extend([
-            (tier1_long, tier1_short, f"{tier1_long}\" × {tier1_short}\"\n{(tier1_long * tier1_short / 144):.1f} sq ft"),
-            (tier2_long, tier2_short, f"{tier2_long}\" × {tier2_short}\"\n{(tier2_long * tier2_short / 144):.1f} sq ft"),
-            (tier2_short, tier2_long, f"{tier2_short}\" × {tier2_long}\"\n{(tier2_short * tier2_long / 144):.1f} sq ft"),
-            (tier1_short, tier1_long, f"{tier1_short}\" × {tier1_long}\"\n{(tier1_short * tier1_long / 144):.1f} sq ft"),
+        # Add labels for corners
+        core_labels.extend([
+            (core_long, core_short, f"{core_long}\" × {core_short}\"\n{(core_long * core_short / 144):.1f} sq ft"),
+            (core_short, core_long, f"{core_short}\" × {core_long}\"\n{(core_short * core_long / 144):.1f} sq ft"),
         ])
     
-    # Add labels for technical limit corners
-    for x, y, label in tech_labels:
-        fig.add_trace(go.Scatter(
-            x=[x], y=[y],
-            mode='markers+text',
-            marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
-            text=[label],
-            textposition="top center",
-            textfont=dict(size=10, color='rgba(255, 152, 0, 1)'),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
+    # Plot all core rectangles as one trace
+    fig.add_trace(go.Scatter(
+        x=core_all_x, y=core_all_y, fill='toself',
+        fillcolor='rgba(33, 150, 243, 0.3)',
+        line=dict(color='rgba(33, 150, 243, 1)', width=3),
+        name='Standard Sizing',
+        hoverinfo='skip'
+    ))
     
-    # Plot all core range tiers
-    if show_all and all_configs_df is not None and not all_configs_df.empty:
-        # For "All" view, plot all individual rectangles with transparency
-        all_x, all_y = [], []
-        for idx, row in all_configs_df.iterrows():
-            # Tier 1
-            c_long = row['CoreRange_ maxlongedge_inches']
-            c_short = row['CoreRange_maxshortedge_inches']
-            rect_x = [min_edge, c_long, c_long, c_short, c_short, 0, 0, min_edge, min_edge]
-            rect_y = [0, 0, c_short, c_short, c_long, c_long, min_edge, min_edge, 0]
-            all_x.extend(rect_x)
-            all_y.extend(rect_y)
-            
-            # Add tier 2 if exists
-            if 'CoreRange_ maxlongedge_inches_tier2' in row.index:
-                if pd.notna(row['CoreRange_ maxlongedge_inches_tier2']):
-                    c_long_t2 = row['CoreRange_ maxlongedge_inches_tier2']
-                    c_short_t2 = row['CoreRange_maxshortedge_inches_tier2']
-                    all_x.append(None)
-                    all_y.append(None)
-                    rect_x_t2 = [min_edge, c_long_t2, c_long_t2, c_short_t2, c_short_t2, 0, 0, min_edge, min_edge]
-                    rect_y_t2 = [0, 0, c_short_t2, c_short_t2, c_long_t2, c_long_t2, min_edge, min_edge, 0]
-                    all_x.extend(rect_x_t2)
-                    all_y.extend(rect_y_t2)
-            
-            if idx < len(all_configs_df) - 1:
-                all_x.append(None)
-                all_y.append(None)
-        
-        fig.add_trace(go.Scatter(
-            x=all_x, y=all_y, fill='toself',
-            fillcolor='rgba(33, 150, 243, 0.3)', line=dict(width=0),
-            name='Standard Sizing', hoverinfo='skip'
-        ))
-    else:
-        # Single configuration view - combine all core tiers into one envelope
-        core_labels = []
-        
-        if len(core_tiers) == 1:
-            # Single tier - plot as before
-            core_long, core_short = core_tiers[0]
-            core_x = [min_edge, core_long, core_long, core_short, core_short, 0, 0, min_edge, min_edge]
-            core_y = [0, 0, core_short, core_short, core_long, core_long, min_edge, min_edge, 0]
-            
-            fig.add_trace(go.Scatter(
-                x=core_x, y=core_y, fill='toself',
-                fillcolor='rgba(33, 150, 243, 0.3)',
-                line=dict(color='rgba(33, 150, 243, 1)', width=3),
-                name='Standard Sizing',
-                hoverinfo='skip'
-            ))
-            
-            core_labels.extend([
-                (core_long, core_short, f"{core_long}\" × {core_short}\"\n{(core_long * core_short / 144):.1f} sq ft"),
-                (core_short, core_long, f"{core_short}\" × {core_long}\"\n{(core_short * core_long / 144):.1f} sq ft"),
-            ])
-        else:
-            # Multiple tiers - create unified envelope
-            tier1_long, tier1_short = core_tiers[0]
-            tier2_long, tier2_short = core_tiers[1]
-            
-            # Build the stepped envelope
-            core_x = [
-                min_edge,
-                tier1_long,
-                tier1_long,
-                tier2_long,
-                tier2_long,
-                tier2_short,
-                tier2_short,
-                tier1_short,
-                tier1_short,
-                0,
-                0,
-                min_edge,
-                min_edge
-            ]
-            
-            core_y = [
-                0,
-                0,
-                tier1_short,
-                tier1_short,
-                tier2_short,
-                tier2_short,
-                tier2_long,
-                tier2_long,
-                tier1_long,
-                tier1_long,
-                min_edge,
-                min_edge,
-                0
-            ]
-            
-            fig.add_trace(go.Scatter(
-                x=core_x, y=core_y, fill='toself',
-                fillcolor='rgba(33, 150, 243, 0.3)',
-                line=dict(color='rgba(33, 150, 243, 1)', width=3),
-                name='Standard Sizing',
-                hoverinfo='skip'
-            ))
-            
-            # Add labels for all four corners
-            core_labels.extend([
-                (tier1_long, tier1_short, f"{tier1_long}\" × {tier1_short}\"\n{(tier1_long * tier1_short / 144):.1f} sq ft"),
-                (tier2_long, tier2_short, f"{tier2_long}\" × {tier2_short}\"\n{(tier2_long * tier2_short / 144):.1f} sq ft"),
-                (tier2_short, tier2_long, f"{tier2_short}\" × {tier2_long}\"\n{(tier2_short * tier2_long / 144):.1f} sq ft"),
-                (tier1_short, tier1_long, f"{tier1_short}\" × {tier1_long}\"\n{(tier1_short * tier1_long / 144):.1f} sq ft"),
-            ])
-        
-        # Add labels for core range corners
-        for x, y, label in core_labels:
+    # Add labels for core range corners (deduplicate if needed)
+    seen_labels = set()
+    for x, y, label in core_labels:
+        label_key = (x, y)
+        if label_key not in seen_labels:
+            seen_labels.add(label_key)
             fig.add_trace(go.Scatter(
                 x=[x], y=[y],
                 mode='markers+text',
@@ -823,21 +716,28 @@ def main():
             
             if glass_type == "Tempered":
                 if show_all_configs:
+                    # For "All" view, show the maximum dimensions found
                     core_long_max = filtered_df['CoreRange_ maxlongedge_inches'].max()
                     core_short_max = filtered_df['CoreRange_maxshortedge_inches'].max()
                     tech_long_max = filtered_df['Technical_limit_longedge_inches'].max()
                     tech_short_max = filtered_df['Technical_limit_shortedge_inches'].max()
+                    
+                    st.markdown("**Standard Sizing**")
+                    st.info(f"Max Long Edge: **{core_long_max}\"** (across all configs)\nMax Short Edge: **{core_short_max}\"** (across all configs)")
+                    
+                    st.markdown("**Semi- or Full-Custom Range**")
+                    st.warning(f"Max Long Edge: **{tech_long_max}\"** (across all configs)\nMax Short Edge: **{tech_short_max}\"** (across all configs)")
                 else:
                     core_long_max = filtered_df['CoreRange_ maxlongedge_inches'].values[0]
                     core_short_max = filtered_df['CoreRange_maxshortedge_inches'].values[0]
                     tech_long_max = filtered_df['Technical_limit_longedge_inches'].values[0]
                     tech_short_max = filtered_df['Technical_limit_shortedge_inches'].values[0]
-                
-                st.markdown("**Standard Sizing**")
-                st.info(f"Max Long Edge: **{core_long_max}\"**\nMax Short Edge: **{core_short_max}\"**")
-                
-                st.markdown("**Semi- or Full-Custom Range**")
-                st.warning(f"Max Long Edge: **{tech_long_max}\"**\nMax Short Edge: **{tech_short_max}\"**")
+                    
+                    st.markdown("**Standard Sizing**")
+                    st.info(f"Max Long Edge: **{core_long_max}\"**\nMax Short Edge: **{core_short_max}\"**")
+                    
+                    st.markdown("**Semi- or Full-Custom Range**")
+                    st.warning(f"Max Long Edge: **{tech_long_max}\"**\nMax Short Edge: **{tech_short_max}\"**")
             
             else:  # Annealed
                 if show_all_configs:
@@ -868,37 +768,47 @@ def main():
                 meets_min = (custom_width >= 16 or custom_height >= 16)
                 
                 if glass_type == "Tempered":
-                    # Check against all tiers for tempered glass
+                    # Collect all tiers for checking
+                    core_tiers = []
+                    tech_tiers = []
+                    
+                    for idx, row in filtered_df.iterrows():
+                        # Tier 1
+                        tech_tier1 = (row['Technical_limit_longedge_inches'], row['Technical_limit_shortedge_inches'])
+                        core_tier1 = (row['CoreRange_ maxlongedge_inches'], row['CoreRange_maxshortedge_inches'])
+                        
+                        if tech_tier1 not in tech_tiers:
+                            tech_tiers.append(tech_tier1)
+                        if core_tier1 not in core_tiers:
+                            core_tiers.append(core_tier1)
+                        
+                        # Tier 2 if exists
+                        if 'Technical_limit_longedge_inches_tier2' in row.index:
+                            if pd.notna(row['Technical_limit_longedge_inches_tier2']):
+                                tech_tier2 = (row['Technical_limit_longedge_inches_tier2'], row['Technical_limit_shortedge_inches_tier2'])
+                                if tech_tier2 not in tech_tiers:
+                                    tech_tiers.append(tech_tier2)
+                        
+                        if 'CoreRange_ maxlongedge_inches_tier2' in row.index:
+                            if pd.notna(row['CoreRange_ maxlongedge_inches_tier2']):
+                                core_tier2 = (row['CoreRange_ maxlongedge_inches_tier2'], row['CoreRange_maxshortedge_inches_tier2'])
+                                if core_tier2 not in core_tiers:
+                                    core_tiers.append(core_tier2)
+                    
+                    # Check against all tiers
                     in_tech = False
+                    for tech_long, tech_short in tech_tiers:
+                        if ((custom_width <= tech_long and custom_height <= tech_short) or 
+                            (custom_width <= tech_short and custom_height <= tech_long)) and meets_min:
+                            in_tech = True
+                            break
+                    
                     in_core = False
-                    
-                    # Check tier 1
-                    if ((custom_width <= tech_long_max and custom_height <= tech_short_max) or 
-                        (custom_width <= tech_short_max and custom_height <= tech_long_max)) and meets_min:
-                        in_tech = True
-                    
-                    if ((custom_width <= core_long_max and custom_height <= core_short_max) or 
-                        (custom_width <= core_short_max and custom_height <= core_long_max)) and meets_min:
-                        in_core = True
-                    
-                    # Check tier 2 if exists
-                    if not in_tech and 'Technical_limit_longedge_inches_tier2' in filtered_df.columns:
-                        tier2_data = filtered_df[filtered_df['Technical_limit_longedge_inches_tier2'].notna()]
-                        if not tier2_data.empty:
-                            tech_long_t2 = tier2_data['Technical_limit_longedge_inches_tier2'].values[0]
-                            tech_short_t2 = tier2_data['Technical_limit_shortedge_inches_tier2'].values[0]
-                            if ((custom_width <= tech_long_t2 and custom_height <= tech_short_t2) or 
-                                (custom_width <= tech_short_t2 and custom_height <= tech_long_t2)) and meets_min:
-                                in_tech = True
-                    
-                    if not in_core and 'CoreRange_ maxlongedge_inches_tier2' in filtered_df.columns:
-                        tier2_data = filtered_df[filtered_df['CoreRange_ maxlongedge_inches_tier2'].notna()]
-                        if not tier2_data.empty:
-                            core_long_t2 = tier2_data['CoreRange_ maxlongedge_inches_tier2'].values[0]
-                            core_short_t2 = tier2_data['CoreRange_maxshortedge_inches_tier2'].values[0]
-                            if ((custom_width <= core_long_t2 and custom_height <= core_short_t2) or 
-                                (custom_width <= core_short_t2 and custom_height <= core_long_t2)) and meets_min:
-                                in_core = True
+                    for core_long, core_short in core_tiers:
+                        if ((custom_width <= core_long and custom_height <= core_short) or 
+                            (custom_width <= core_short and custom_height <= core_long)) and meets_min:
+                            in_core = True
+                            break
                 else:
                     area_sqin = custom_width * custom_height
                     max_dim = max(custom_width, custom_height)
