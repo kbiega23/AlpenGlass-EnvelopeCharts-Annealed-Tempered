@@ -738,31 +738,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
         hovertemplate='%{text}<extra></extra>'
     ))
     
-    # Semi- or Full-Custom Range curve
-    tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area)
-    
-    fig.add_trace(go.Scatter(
-        x=tech_curve_x, y=tech_curve_y, fill='toself',
-        fillcolor='rgba(255, 152, 0, 0.2)',
-        line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
-        name='Semi- or Full-Custom Range', hoverinfo='skip'
-    ))
-    
-    # Add labels for Semi- or Full-Custom Range key points
-    tech_key_points = get_annealed_label_points(min_edge, tech_max_edge, tech_max_area)
-    for x, y, label in tech_key_points:
-        fig.add_trace(go.Scatter(
-            x=[x], y=[y],
-            mode='markers+text',
-            marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
-            text=[label],
-            textposition='top center',
-            textfont=dict(size=10, color='rgb(204, 102, 0)', family='Arial'),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
-    
-    # Standard Sizing curve
+    # CHANGED ORDER: Plot Standard Sizing curve FIRST (so it appears below)
     core_curve_x, core_curve_y = generate_annealed_curve(min_edge, core_max_edge, core_max_area)
     
     fig.add_trace(go.Scatter(
@@ -782,6 +758,30 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
             text=[label],
             textposition='bottom center',
             textfont=dict(size=10, color='rgb(21, 101, 192)', family='Arial'),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+    
+    # CHANGED ORDER: Plot Semi- or Full-Custom Range curve SECOND (so it appears on top)
+    tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area)
+    
+    fig.add_trace(go.Scatter(
+        x=tech_curve_x, y=tech_curve_y, fill='toself',
+        fillcolor='rgba(255, 152, 0, 0.2)',
+        line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
+        name='Semi- or Full-Custom Range', hoverinfo='skip'
+    ))
+    
+    # Add labels for Semi- or Full-Custom Range key points
+    tech_key_points = get_annealed_label_points(min_edge, tech_max_edge, tech_max_area)
+    for x, y, label in tech_key_points:
+        fig.add_trace(go.Scatter(
+            x=[x], y=[y],
+            mode='markers+text',
+            marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
+            text=[label],
+            textposition='top center',
+            textfont=dict(size=10, color='rgb(204, 102, 0)', family='Arial'),
             showlegend=False,
             hoverinfo='skip'
         ))
