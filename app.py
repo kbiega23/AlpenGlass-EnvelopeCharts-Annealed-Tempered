@@ -76,6 +76,95 @@ def load_data():
     st.error("Excel file not found.")
     return None, None
 
+def compute_envelope(rectangles, min_edge):
+    """
+    Compute the outer envelope (boundary) of a set of rectangles.
+    Each rectangle is defined as (long_edge, short_edge).
+    Returns x, y coordinates for the outer perimeter traced clockwise from origin.
+    """
+    if not rectangles:
+        return [], []
+    
+    # Collect all critical y-values where the boundary might change
+    y_values = set([0, min_edge])
+    for long_edge, short_edge in rectangles:
+        y_values.add(short_edge)
+        y_values.add(long_edge)
+    
+    y_sorted = sorted(y_values)
+    
+    # For each y-level, compute the maximum x value achievable
+    max_x_at_y = {}
+    for y in y_sorted:
+        max_x = 0
+        for long_edge, short_edge in rectangles:
+            # Check if this rectangle extends to this y level
+            if y <= short_edge:
+                max_x = max(max_x, long_edge)
+            if y <= long_edge:
+                max_x = max(max_x, short_edge)
+        max_x_at_y[y] = max_x
+    
+    # Build the envelope path clockwise from origin
+    envelope_x = []
+    envelope_y = []
+    
+    # Start at origin
+    envelope_x.append(0)
+    envelope_y.append(0)
+    
+    # Go right along x-axis to where we start meeting the min_edge requirement
+    envelope_x.append(min_edge)
+    envelope_y.append(0)
+    
+    # Trace the right side going upward (stepped pattern)
+    for i, y in enumerate(y_sorted):
+        if y == 0:
+            continue  # Already handled
+        
+        x = max_x_at_y[y]
+        
+        # Check if we need to step out or in
+        prev_y = y_sorted[i-1] if i > 0 else 0
+        prev_x = max_x_at_y[prev_y]
+        
+        if y >= min_edge or x >= min_edge:  # Must meet minimum requirement
+            if x != prev_x:
+                # Horizontal step
+                envelope_x.append(x)
+                envelope_y.append(prev_y)
+            # Vertical step
+            envelope_x.append(x)
+            envelope_y.append(y)
+    
+    # Now we're at the top-right. Get the maximum y we reached
+    if envelope_y:
+        max_y_reached = envelope_y[-1]
+    else:
+        max_y_reached = min_edge
+    
+    # Go left to the y-axis at maximum height
+    envelope_x.append(0)
+    envelope_y.append(max_y_reached)
+    
+    # Go down the y-axis to min_edge
+    envelope_x.append(0)
+    envelope_y.append(min_edge)
+    
+    # Go right to complete the minimum size exclusion box
+    envelope_x.append(min_edge)
+    envelope_y.append(min_edge)
+    
+    # Go down to x-axis
+    envelope_x.append(min_edge)
+    envelope_y.append(0)
+    
+    # Close back to origin
+    envelope_x.append(0)
+    envelope_y.append(0)
+    
+    return envelope_x, envelope_y
+
 def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_df=None, custom_point=None, filter_text=""):
     """Create plotly figure for tempered glass with multi-tier support"""
     
@@ -198,90 +287,79 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
         hovertemplate='%{text}<extra></extra>'
     ))
     
-    # Plot technical limit - plot all rectangles individually
-    tech_labels = []
-    
-    # Plot each technical tier rectangle
-    tech_all_x = []
-    tech_all_y = []
-    
-    for idx, (tech_long, tech_short) in enumerate(tech_tiers):
-        rect_x = [min_edge, tech_long, tech_long, tech_short, tech_short, 0, 0, min_edge, min_edge]
-        rect_y = [0, 0, tech_short, tech_short, tech_long, tech_long, min_edge, min_edge, 0]
-        
-        tech_all_x.extend(rect_x)
-        tech_all_y.extend(rect_y)
-        
-        # Add separator between rectangles (None creates a break in the line)
-        if idx < len(tech_tiers) - 1:
-            tech_all_x.append(None)
-            tech_all_y.append(None)
-        
-        # Add labels for corners
-        tech_labels.extend([
-            (tech_long, tech_short, f"{tech_long}\" × {tech_short}\"\n{(tech_long * tech_short / 144):.1f} sq ft"),
-            (tech_short, tech_long, f"{tech_short}\" × {tech_long}\"\n{(tech_short * tech_long / 144):.1f} sq ft"),
-        ])
-    
-    # Plot all technical rectangles as one trace
-    fig.add_trace(go.Scatter(
-        x=tech_all_x, y=tech_all_y, fill='toself',
-        fillcolor='rgba(255, 152, 0, 0.2)',
-        line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
-        name='Semi- or Full-Custom Range',
-        hoverinfo='skip'
-    ))
-    
-    # Add labels for technical limit corners (deduplicate if needed)
-    seen_labels = set()
-    for x, y, label in tech_labels:
-        label_key = (x, y)
-        if label_key not in seen_labels:
-            seen_labels.add(label_key)
-            fig.add_trace(go.Scatter(
-                x=[x], y=[y],
-                mode='markers+text',
-                marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
-                text=[label],
-                textposition="top center",
-                textfont=dict(size=10, color='rgba(255, 152, 0, 1)'),
-                showlegend=False,
-                hoverinfo='skip'
-            ))
-    
-    # Plot core range - plot all rectangles individually
+    # Plot core range FIRST (so it appears below)
     core_labels = []
-    core_all_x = []
-    core_all_y = []
     
-    for idx, (core_long, core_short) in enumerate(core_tiers):
-        rect_x = [min_edge, core_long, core_long, core_short, core_short, 0, 0, min_edge, min_edge]
-        rect_y = [0, 0, core_short, core_short, core_long, core_long, min_edge, min_edge, 0]
+    if show_all and all_configs_df is not None:
+        # For "All" view: plot each rectangle with fill but NO line, then add single outline
+        core_all_x = []
+        core_all_y = []
         
-        core_all_x.extend(rect_x)
-        core_all_y.extend(rect_y)
+        for idx, (core_long, core_short) in enumerate(core_tiers):
+            rect_x = [min_edge, core_long, core_long, core_short, core_short, 0, 0, min_edge, min_edge]
+            rect_y = [0, 0, core_short, core_short, core_long, core_long, min_edge, min_edge, 0]
+            
+            core_all_x.extend(rect_x)
+            core_all_y.extend(rect_y)
+            
+            if idx < len(core_tiers) - 1:
+                core_all_x.append(None)
+                core_all_y.append(None)
+            
+            core_labels.extend([
+                (core_long, core_short, f"{core_long}\" × {core_short}\"\n{(core_long * core_short / 144):.1f} sq ft"),
+                (core_short, core_long, f"{core_short}\" × {core_long}\"\n{(core_short * core_long / 144):.1f} sq ft"),
+            ])
         
-        # Add separator between rectangles
-        if idx < len(core_tiers) - 1:
-            core_all_x.append(None)
-            core_all_y.append(None)
+        # Plot filled areas WITHOUT outline
+        fig.add_trace(go.Scatter(
+            x=core_all_x, y=core_all_y, fill='toself',
+            fillcolor='rgba(33, 150, 243, 0.3)',
+            line=dict(width=0),  # No line on individual rectangles
+            name='Standard Sizing',
+            showlegend=True,
+            hoverinfo='skip'
+        ))
         
-        # Add labels for corners
-        core_labels.extend([
-            (core_long, core_short, f"{core_long}\" × {core_short}\"\n{(core_long * core_short / 144):.1f} sq ft"),
-            (core_short, core_long, f"{core_short}\" × {core_long}\"\n{(core_short * core_long / 144):.1f} sq ft"),
-        ])
+        # Compute and plot outer envelope outline
+        core_envelope_x, core_envelope_y = compute_envelope(core_tiers, min_edge)
+        fig.add_trace(go.Scatter(
+            x=core_envelope_x, y=core_envelope_y,
+            mode='lines',
+            line=dict(color='rgba(33, 150, 243, 1)', width=3),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+    else:
+        # Single configuration: plot normally with outline
+        core_all_x = []
+        core_all_y = []
+        
+        for idx, (core_long, core_short) in enumerate(core_tiers):
+            rect_x = [min_edge, core_long, core_long, core_short, core_short, 0, 0, min_edge, min_edge]
+            rect_y = [0, 0, core_short, core_short, core_long, core_long, min_edge, min_edge, 0]
+            
+            core_all_x.extend(rect_x)
+            core_all_y.extend(rect_y)
+            
+            if idx < len(core_tiers) - 1:
+                core_all_x.append(None)
+                core_all_y.append(None)
+            
+            core_labels.extend([
+                (core_long, core_short, f"{core_long}\" × {core_short}\"\n{(core_long * core_short / 144):.1f} sq ft"),
+                (core_short, core_long, f"{core_short}\" × {core_long}\"\n{(core_short * core_long / 144):.1f} sq ft"),
+            ])
+        
+        fig.add_trace(go.Scatter(
+            x=core_all_x, y=core_all_y, fill='toself',
+            fillcolor='rgba(33, 150, 243, 0.3)',
+            line=dict(color='rgba(33, 150, 243, 1)', width=3),
+            name='Standard Sizing',
+            hoverinfo='skip'
+        ))
     
-    # Plot all core rectangles as one trace
-    fig.add_trace(go.Scatter(
-        x=core_all_x, y=core_all_y, fill='toself',
-        fillcolor='rgba(33, 150, 243, 0.3)',
-        line=dict(color='rgba(33, 150, 243, 1)', width=3),
-        name='Standard Sizing',
-        hoverinfo='skip'
-    ))
-    
-    # Add labels for core range corners (deduplicate if needed)
+    # Add labels for core range corners (deduplicate)
     seen_labels = set()
     for x, y, label in core_labels:
         label_key = (x, y)
@@ -294,6 +372,97 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
                 text=[label],
                 textposition="top center",
                 textfont=dict(size=10, color='rgba(33, 150, 243, 1)'),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
+    
+    # Plot technical limit SECOND (so it appears on top)
+    tech_labels = []
+    
+    if show_all and all_configs_df is not None:
+        # For "All" view: plot each rectangle with fill but NO line, then add single outline
+        tech_all_x = []
+        tech_all_y = []
+        
+        for idx, (tech_long, tech_short) in enumerate(tech_tiers):
+            rect_x = [min_edge, tech_long, tech_long, tech_short, tech_short, 0, 0, min_edge, min_edge]
+            rect_y = [0, 0, tech_short, tech_short, tech_long, tech_long, min_edge, min_edge, 0]
+            
+            tech_all_x.extend(rect_x)
+            tech_all_y.extend(rect_y)
+            
+            # Add separator between rectangles
+            if idx < len(tech_tiers) - 1:
+                tech_all_x.append(None)
+                tech_all_y.append(None)
+            
+            # Add labels for corners
+            tech_labels.extend([
+                (tech_long, tech_short, f"{tech_long}\" × {tech_short}\"\n{(tech_long * tech_short / 144):.1f} sq ft"),
+                (tech_short, tech_long, f"{tech_short}\" × {tech_long}\"\n{(tech_short * tech_long / 144):.1f} sq ft"),
+            ])
+        
+        # Plot filled areas WITHOUT outline
+        fig.add_trace(go.Scatter(
+            x=tech_all_x, y=tech_all_y, fill='toself',
+            fillcolor='rgba(255, 152, 0, 0.2)',
+            line=dict(width=0),  # No line on individual rectangles
+            name='Semi- or Full-Custom Range',
+            showlegend=True,
+            hoverinfo='skip'
+        ))
+        
+        # Compute and plot outer envelope outline
+        tech_envelope_x, tech_envelope_y = compute_envelope(tech_tiers, min_edge)
+        fig.add_trace(go.Scatter(
+            x=tech_envelope_x, y=tech_envelope_y,
+            mode='lines',
+            line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+    else:
+        # Single configuration: plot normally with outline
+        tech_all_x = []
+        tech_all_y = []
+        
+        for idx, (tech_long, tech_short) in enumerate(tech_tiers):
+            rect_x = [min_edge, tech_long, tech_long, tech_short, tech_short, 0, 0, min_edge, min_edge]
+            rect_y = [0, 0, tech_short, tech_short, tech_long, tech_long, min_edge, min_edge, 0]
+            
+            tech_all_x.extend(rect_x)
+            tech_all_y.extend(rect_y)
+            
+            if idx < len(tech_tiers) - 1:
+                tech_all_x.append(None)
+                tech_all_y.append(None)
+            
+            tech_labels.extend([
+                (tech_long, tech_short, f"{tech_long}\" × {tech_short}\"\n{(tech_long * tech_short / 144):.1f} sq ft"),
+                (tech_short, tech_long, f"{tech_short}\" × {tech_long}\"\n{(tech_short * tech_long / 144):.1f} sq ft"),
+            ])
+        
+        fig.add_trace(go.Scatter(
+            x=tech_all_x, y=tech_all_y, fill='toself',
+            fillcolor='rgba(255, 152, 0, 0.2)',
+            line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
+            name='Semi- or Full-Custom Range',
+            hoverinfo='skip'
+        ))
+    
+    # Add labels for technical limit corners (deduplicate)
+    seen_labels = set()
+    for x, y, label in tech_labels:
+        label_key = (x, y)
+        if label_key not in seen_labels:
+            seen_labels.add(label_key)
+            fig.add_trace(go.Scatter(
+                x=[x], y=[y],
+                mode='markers+text',
+                marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
+                text=[label],
+                textposition="top center",
+                textfont=dict(size=10, color='rgba(255, 152, 0, 1)'),
                 showlegend=False,
                 hoverinfo='skip'
             ))
