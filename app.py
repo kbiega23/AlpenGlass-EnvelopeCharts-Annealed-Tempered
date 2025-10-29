@@ -299,11 +299,6 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             if idx < len(core_tiers) - 1:
                 core_all_x.append(None)
                 core_all_y.append(None)
-            
-            core_labels.extend([
-                (core_long, core_short, f"{core_long}\" × {core_short}\"\n{(core_long * core_short / 144):.1f} sq ft"),
-                (core_short, core_long, f"{core_short}\" × {core_long}\"\n{(core_short * core_long / 144):.1f} sq ft"),
-            ])
         
         # Plot filled areas WITHOUT outline
         fig.add_trace(go.Scatter(
@@ -324,6 +319,18 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             showlegend=False,
             hoverinfo='skip'
         ))
+        
+        # For "All" view: only label points that are on the envelope boundary
+        envelope_points = set(zip(core_envelope_x, core_envelope_y))
+        for core_long, core_short in core_tiers:
+            # Check if landscape corner is on envelope
+            if (core_long, core_short) in envelope_points:
+                label = f"{core_long}\" × {core_short}\"\n{(core_long * core_short / 144):.1f} sq ft"
+                core_labels.append((core_long, core_short, label))
+            # Check if portrait corner is on envelope
+            if (core_short, core_long) in envelope_points:
+                label = f"{core_short}\" × {core_long}\"\n{(core_short * core_long / 144):.1f} sq ft"
+                core_labels.append((core_short, core_long, label))
     else:
         # Single configuration: check if multiple tiers
         if len(core_tiers) > 1:
@@ -427,12 +434,6 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             if idx < len(tech_tiers) - 1:
                 tech_all_x.append(None)
                 tech_all_y.append(None)
-            
-            # Add labels for corners
-            tech_labels.extend([
-                (tech_long, tech_short, f"{tech_long}\" × {tech_short}\"\n{(tech_long * tech_short / 144):.1f} sq ft"),
-                (tech_short, tech_long, f"{tech_short}\" × {tech_long}\"\n{(tech_short * tech_long / 144):.1f} sq ft"),
-            ])
         
         # Plot filled areas WITHOUT outline
         fig.add_trace(go.Scatter(
@@ -453,6 +454,18 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             showlegend=False,
             hoverinfo='skip'
         ))
+        
+        # For "All" view: only label points that are on the envelope boundary
+        envelope_points = set(zip(tech_envelope_x, tech_envelope_y))
+        for tech_long, tech_short in tech_tiers:
+            # Check if landscape corner is on envelope
+            if (tech_long, tech_short) in envelope_points:
+                label = f"{tech_long}\" × {tech_short}\"\n{(tech_long * tech_short / 144):.1f} sq ft"
+                tech_labels.append((tech_long, tech_short, label))
+            # Check if portrait corner is on envelope
+            if (tech_short, tech_long) in envelope_points:
+                label = f"{tech_short}\" × {tech_long}\"\n{(tech_short * tech_long / 144):.1f} sq ft"
+                tech_labels.append((tech_short, tech_long, label))
     else:
         # Single configuration: check if multiple tiers
         if len(tech_tiers) > 1:
