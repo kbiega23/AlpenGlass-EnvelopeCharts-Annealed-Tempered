@@ -596,7 +596,6 @@ def generate_annealed_curve(min_edge, max_edge, max_area, max_short_edge=None):
     curve_y.append(min_edge)
     
     # Now trace up the y-axis following the area constraint
-    # Find where the hyperbola intersects the y-axis (x approaching 0)
     # For very small x values, y = max_area / x, capped at max_edge
     y_at_yaxis = min(max_edge, 150)
     
@@ -605,21 +604,16 @@ def generate_annealed_curve(min_edge, max_edge, max_area, max_short_edge=None):
     curve_y.append(y_at_yaxis)
     
     # Trace the constraint curve from left (y-axis) to right
-    # Start from x = small value and increase
-    hit_short_edge_limit = False
-    for x in range(1, min(int(max_edge) + 1, 151)):
+    # Determine the max x value to trace to
+    if max_short_edge is not None:
+        # If there's a short edge constraint, stop when x reaches max_short_edge
+        # (assuming the hyperbola keeps y >= x in this range, so x is the short edge)
+        max_x_to_trace = min(int(max_short_edge), int(max_edge))
+    else:
+        max_x_to_trace = int(max_edge)
+    
+    for x in range(1, min(max_x_to_trace + 1, 151)):
         y = min(max_area / x, max_edge, 150)
-        
-        # Apply short edge constraint (short edge is min(x, y))
-        if max_short_edge is not None:
-            if x <= y:  # x is short edge
-                if x > max_short_edge:
-                    # We've hit the short edge limit
-                    # Stop increasing x, but continue the curve vertically along max_short_edge
-                    hit_short_edge_limit = True
-                    break
-            else:  # y is short edge
-                y = min(y, max_short_edge)
         
         if y >= min_edge:
             curve_x.append(x)
@@ -633,24 +627,17 @@ def generate_annealed_curve(min_edge, max_edge, max_area, max_short_edge=None):
                 curve_y.append(min_edge)
             break
     
-    # If we hit the short edge limit, continue vertically along max_short_edge to max_edge
-    if hit_short_edge_limit and max_short_edge is not None:
-        # Add point at (max_short_edge, y_at_short_edge) if not already added
-        if curve_x and curve_x[-1] < max_short_edge:
-            y_at_short_edge = min(max_area / max_short_edge, max_edge, 150)
-            curve_x.append(max_short_edge)
-            curve_y.append(y_at_short_edge)
-        
-        # Continue vertically to max_edge
-        if curve_y and curve_y[-1] < max_edge:
-            curve_x.append(max_short_edge)
-            curve_y.append(max_edge)
-    
-    # Check if we need to continue along the max_edge limit (for cases without short edge constraint)
-    if not hit_short_edge_limit and curve_y and curve_y[-1] >= max_edge - 1:
-        # We hit the edge limit, continue to the right along max_edge
+    # Check if we need to continue along the max_edge limit
+    if curve_y and curve_y[-1] >= max_edge - 1:
+        # We hit the edge limit, continue to the right along max_edge if there's room
         last_x = curve_x[-1]
-        max_x_allowed = max_edge
+        
+        # Determine how far we can extend along the top edge
+        if max_short_edge is not None:
+            # With short edge constraint, we can only go to max_short_edge
+            max_x_allowed = max_short_edge
+        else:
+            max_x_allowed = max_edge
         
         if last_x < max_x_allowed:
             curve_x.append(max_x_allowed)
