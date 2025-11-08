@@ -159,7 +159,7 @@ def compute_envelope(rectangles, min_edge):
     
     return envelope_x, envelope_y
 
-def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_df=None, custom_point=None, filter_text=""):
+def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_df=None, custom_point=None, filter_text="", show_labels=True):
     """Create plotly figure for tempered glass with multi-tier support"""
     
     if config_data.empty:
@@ -399,21 +399,22 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             ))
     
     # Add labels for core range corners (deduplicate)
-    seen_labels = set()
-    for x, y, label in core_labels:
-        label_key = (x, y)
-        if label_key not in seen_labels:
-            seen_labels.add(label_key)
-            fig.add_trace(go.Scatter(
-                x=[x], y=[y],
-                mode='markers+text',
-                marker=dict(size=8, color='rgba(33, 150, 243, 0.9)', symbol='circle'),
-                text=[label],
-                textposition="top center",
-                textfont=dict(size=10, color='rgba(33, 150, 243, 1)'),
-                showlegend=False,
-                hoverinfo='skip'
-            ))
+    if show_labels:
+        seen_labels = set()
+        for x, y, label in core_labels:
+            label_key = (x, y)
+            if label_key not in seen_labels:
+                seen_labels.add(label_key)
+                fig.add_trace(go.Scatter(
+                    x=[x], y=[y],
+                    mode='markers+text',
+                    marker=dict(size=8, color='rgba(33, 150, 243, 0.9)', symbol='circle'),
+                    text=[label],
+                    textposition="top center",
+                    textfont=dict(size=10, color='rgba(33, 150, 243, 1)'),
+                    showlegend=False,
+                    hoverinfo='skip'
+                ))
     
     # Plot technical limit SECOND (so it appears on top)
     tech_labels = []
@@ -534,21 +535,22 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             ))
     
     # Add labels for technical limit corners (deduplicate)
-    seen_labels = set()
-    for x, y, label in tech_labels:
-        label_key = (x, y)
-        if label_key not in seen_labels:
-            seen_labels.add(label_key)
-            fig.add_trace(go.Scatter(
-                x=[x], y=[y],
-                mode='markers+text',
-                marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
-                text=[label],
-                textposition="top center",
-                textfont=dict(size=10, color='rgba(255, 152, 0, 1)'),
-                showlegend=False,
-                hoverinfo='skip'
-            ))
+    if show_labels:
+        seen_labels = set()
+        for x, y, label in tech_labels:
+            label_key = (x, y)
+            if label_key not in seen_labels:
+                seen_labels.add(label_key)
+                fig.add_trace(go.Scatter(
+                    x=[x], y=[y],
+                    mode='markers+text',
+                    marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
+                    text=[label],
+                    textposition="top center",
+                    textfont=dict(size=10, color='rgba(255, 152, 0, 1)'),
+                    showlegend=False,
+                    hoverinfo='skip'
+                ))
     
     if custom_point:
         add_custom_point(fig, custom_point, min_edge, core_tiers, None, tech_tiers, None, False)
@@ -672,7 +674,7 @@ def get_annealed_label_points(min_edge, max_edge, max_area):
     
     return label_points
 
-def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_df=None, custom_point=None, filter_text=""):
+def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_df=None, custom_point=None, filter_text="", show_labels=True):
     """Create plotly figure for annealed glass with area constraints"""
     
     if config_data.empty:
@@ -745,18 +747,19 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     ))
     
     # Add labels for Standard Sizing key points
-    core_key_points = get_annealed_label_points(min_edge, core_max_edge, core_max_area)
-    for x, y, label in core_key_points:
-        fig.add_trace(go.Scatter(
-            x=[x], y=[y],
-            mode='markers+text',
-            marker=dict(size=8, color='rgba(33, 150, 243, 0.9)', symbol='circle'),
-            text=[label],
-            textposition='bottom center',
-            textfont=dict(size=10, color='rgb(21, 101, 192)', family='Arial'),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
+    if show_labels:
+        core_key_points = get_annealed_label_points(min_edge, core_max_edge, core_max_area)
+        for x, y, label in core_key_points:
+            fig.add_trace(go.Scatter(
+                x=[x], y=[y],
+                mode='markers+text',
+                marker=dict(size=8, color='rgba(33, 150, 243, 0.9)', symbol='circle'),
+                text=[label],
+                textposition='bottom center',
+                textfont=dict(size=10, color='rgb(21, 101, 192)', family='Arial'),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
     
     # CHANGED ORDER: Plot Semi- or Full-Custom Range curve SECOND (so it appears on top)
     tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area)
@@ -769,18 +772,19 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     ))
     
     # Add labels for Semi- or Full-Custom Range key points
-    tech_key_points = get_annealed_label_points(min_edge, tech_max_edge, tech_max_area)
-    for x, y, label in tech_key_points:
-        fig.add_trace(go.Scatter(
-            x=[x], y=[y],
-            mode='markers+text',
-            marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
-            text=[label],
-            textposition='top center',
-            textfont=dict(size=10, color='rgb(204, 102, 0)', family='Arial'),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
+    if show_labels:
+        tech_key_points = get_annealed_label_points(min_edge, tech_max_edge, tech_max_area)
+        for x, y, label in tech_key_points:
+            fig.add_trace(go.Scatter(
+                x=[x], y=[y],
+                mode='markers+text',
+                marker=dict(size=8, color='rgba(255, 152, 0, 0.9)', symbol='circle'),
+                text=[label],
+                textposition='top center',
+                textfont=dict(size=10, color='rgb(204, 102, 0)', family='Arial'),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
     
     if custom_point:
         add_custom_point(fig, custom_point, min_edge, core_max_edge, core_max_area, tech_max_edge, tech_max_area, True)
@@ -864,6 +868,9 @@ def main():
         horizontal=True
     )
     
+    # Add checkbox to toggle label visibility
+    show_labels = st.checkbox("Show dimension labels on chart", value=True)
+    
     df = tempered_df if glass_type == "Tempered" else annealed_df
     
     st.markdown("---")
@@ -943,11 +950,11 @@ def main():
             if glass_type == "Tempered":
                 fig = create_tempered_plot(plot_data, show_all=show_all_configs, 
                                           all_configs_df=filtered_df if show_all_configs else None, 
-                                          custom_point=custom_point, filter_text=filter_text)
+                                          custom_point=custom_point, filter_text=filter_text, show_labels=show_labels)
             else:
                 fig = create_annealed_plot(plot_data, show_all=show_all_configs,
                                           all_configs_df=filtered_df if show_all_configs else None,
-                                          custom_point=custom_point, filter_text=filter_text)
+                                          custom_point=custom_point, filter_text=filter_text, show_labels=show_labels)
             
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
