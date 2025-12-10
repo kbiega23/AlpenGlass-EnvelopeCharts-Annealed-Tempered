@@ -910,6 +910,45 @@ def main():
     
     st.markdown("---")
     
+    # Weight calculation section
+    st.markdown("### ⚖️ Thin Glass Triple Weight")
+    
+    # Weight lookup dictionary (lbs per square foot)
+    weight_per_sqft = {
+        0.5: 0.24,
+        1.1: 0.53,
+        1.3: 0.67,
+        3: 1.64,
+        4: 2.0,
+        5: 2.45,
+        6: 3.27
+    }
+    
+    # Calculate weight based on selected glass thicknesses
+    if outer_lite != 'All' and inner_lite != 'All':
+        outer_weight = weight_per_sqft.get(outer_lite, 0)
+        inner_weight = weight_per_sqft.get(inner_lite, 0)
+        total_weight_per_sqft = (2 * outer_weight) + inner_weight
+        
+        weight_col1, weight_col2 = st.columns(2)
+        
+        with weight_col1:
+            st.metric("Weight per Square Foot", f"{total_weight_per_sqft:.2f} lbs/ft²")
+        
+        with weight_col2:
+            if custom_width > 0 and custom_height > 0:
+                custom_area = (custom_width * custom_height) / 144
+                total_unit_weight = total_weight_per_sqft * custom_area
+                st.metric("Total Unit Weight", f"{total_unit_weight:.2f} lbs")
+            else:
+                st.metric("Total Unit Weight", "Enter dimensions")
+        
+        st.caption("⚠️ Weight is approximate and does not include weight of TPS/secondary seal")
+    else:
+        st.info("Select specific Outer Lites and Center Lite thicknesses to calculate weight")
+    
+    st.markdown("---")
+    
     filtered_df = df.copy()
     
     if outer_lite != 'All':
