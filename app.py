@@ -24,7 +24,7 @@ This interactive tool helps you determine if your window dimensions fit within A
 
 **Understanding the Visualization:**
 - **Standard Sizing** (blue): Efficient, low-cost production range
-- **Semi- or Full-Custom Range** (orange): Maximum physically achievable size (may require special order and longer lead time)
+- **Custom Range** (orange): Maximum physically achievable size (may require special order and longer lead time)
 - **Minimum Size**: At least one edge must be 16" or greater
 - **White areas**: Do not meet minimum size requirements
 
@@ -37,7 +37,7 @@ This interactive tool helps you determine if your window dimensions fit within A
 2. Use the dropdowns to filter by glass specifications (or leave as "All")
 3. Enter your desired width and height in the custom size input fields
 4. A star will appear on the chart showing your size's location
-5. Check the status indicator to see if it falls within Standard Sizing, Semi- or Full-Custom Range, or outside our capabilities
+5. Check the status indicator to see if it falls within Standard Sizing, Custom Range, or outside our capabilities
 
 **Interpreting the Chart:**
 - Hover over any point to see exact dimensions and area
@@ -265,7 +265,7 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
                 row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>Standard Sizing</b>")
             elif in_tech:
                 Z[i, j] = 1
-                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>⚠️ Semi- or Full-Custom Range</b>")
+                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>⚠️ Custom Range</b>")
             else:
                 Z[i, j] = 0
                 if not meets_min:
@@ -441,7 +441,7 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
             x=tech_all_x, y=tech_all_y, fill='toself',
             fillcolor='rgba(255, 152, 0, 0.2)',
             line=dict(width=0),  # No line on individual rectangles
-            name='Semi- or Full-Custom Range',
+            name='Custom Range',
             showlegend=True,
             hoverinfo='skip'
         ))
@@ -495,7 +495,7 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
                 x=tech_all_x, y=tech_all_y, fill='toself',
                 fillcolor='rgba(255, 152, 0, 0.2)',
                 line=dict(width=0),
-                name='Semi- or Full-Custom Range',
+                name='Custom Range',
                 showlegend=True,
                 hoverinfo='skip'
             ))
@@ -530,7 +530,7 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
                 x=tech_all_x, y=tech_all_y, fill='toself',
                 fillcolor='rgba(255, 152, 0, 0.2)',
                 line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
-                name='Semi- or Full-Custom Range',
+                name='Custom Range',
                 hoverinfo='skip'
             ))
     
@@ -720,7 +720,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
                 row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>Standard Sizing</b>")
             elif in_tech:
                 Z[i, j] = 1
-                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>⚠️ Semi- or Full-Custom Range</b>")
+                row_text.append(f"Width: {int(x)}\"<br>Height: {int(y)}\"<br>Area: {area_sqft:.1f} sq ft<br><b>⚠️ Custom Range</b>")
             else:
                 Z[i, j] = 0
                 if not meets_min:
@@ -761,17 +761,17 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
                 hoverinfo='skip'
             ))
     
-    # CHANGED ORDER: Plot Semi- or Full-Custom Range curve SECOND (so it appears on top)
+    # CHANGED ORDER: Plot Custom Range curve SECOND (so it appears on top)
     tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area)
     
     fig.add_trace(go.Scatter(
         x=tech_curve_x, y=tech_curve_y, fill='toself',
         fillcolor='rgba(255, 152, 0, 0.2)',
         line=dict(color='rgba(255, 152, 0, 0.8)', width=2, dash='dash'),
-        name='Semi- or Full-Custom Range', hoverinfo='skip'
+        name='Custom Range', hoverinfo='skip'
     ))
     
-    # Add labels for Semi- or Full-Custom Range key points
+    # Add labels for Custom Range key points
     if show_labels:
         tech_key_points = get_annealed_label_points(min_edge, tech_max_edge, tech_max_area)
         for x, y, label in tech_key_points:
@@ -840,7 +840,7 @@ def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech
     if in_core:
         marker_color, status_text = 'rgb(0, 200, 0)', "✓ Within Standard Sizing"
     elif in_tech:
-        marker_color, status_text = 'rgb(255, 165, 0)', "⚠ Within Semi- or Full-Custom Range"
+        marker_color, status_text = 'rgb(255, 165, 0)', "⚠ Within Custom Range"
     elif not meets_min:
         marker_color, status_text = 'rgb(255, 0, 0)', "✗ Below Minimum Size"
     else:
@@ -989,7 +989,7 @@ def main():
                     st.markdown("**Standard Sizing**")
                     st.info(f"Max Long Edge: **{core_long_max}\"** (across all configs)\nMax Short Edge: **{core_short_max}\"** (across all configs)")
                     
-                    st.markdown("**Semi- or Full-Custom Range**")
+                    st.markdown("**Custom Range**")
                     st.warning(f"Max Long Edge: **{tech_long_max}\"** (across all configs)\nMax Short Edge: **{tech_short_max}\"** (across all configs)")
                 else:
                     core_long_max = filtered_df['CoreRange_ maxlongedge_inches'].values[0]
@@ -1000,7 +1000,7 @@ def main():
                     st.markdown("**Standard Sizing**")
                     st.info(f"Max Long Edge: **{core_long_max}\"**\nMax Short Edge: **{core_short_max}\"**")
                     
-                    st.markdown("**Semi- or Full-Custom Range**")
+                    st.markdown("**Custom Range**")
                     st.warning(f"Max Long Edge: **{tech_long_max}\"**\nMax Short Edge: **{tech_short_max}\"**")
             
             else:  # Annealed
@@ -1018,7 +1018,7 @@ def main():
                 st.markdown("**Standard Sizing**")
                 st.info(f"Max Edge: **{core_max_edge}\"**\nMax Area: **{core_max_area} sq ft**")
                 
-                st.markdown("**Semi- or Full-Custom Range**")
+                st.markdown("**Custom Range**")
                 st.warning(f"Max Edge: **{tech_max_edge}\"**\nMax Area: **{tech_max_area} sq ft**")
             
             st.markdown("**Minimum Size**")
@@ -1082,7 +1082,7 @@ def main():
                 if in_core:
                     st.success("✓ **Within Standard Sizing** - Standard pricing and lead time")
                 elif in_tech:
-                    st.warning("⚠ **Within Semi- or Full-Custom Range** - May require special order and longer lead time")
+                    st.warning("⚠ **Within Custom Range** - May require special order and longer lead time")
                 elif not meets_min:
                     st.error("✗ **Below Minimum Size** - At least one edge must be 16\" or greater")
                 else:
