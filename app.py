@@ -924,13 +924,29 @@ def main():
         6: 3.27
     }
     
+    # Actual glass thicknesses for TPS/sealant calculations (nominal -> actual in mm)
+    actual_thickness = {
+        0.5: 0.5,
+        1.1: 1.1,
+        1.3: 1.3,
+        3: 3.1,
+        4: 3.9,
+        5: 4.7,
+        6: 5.7
+    }
+    
     # Calculate weight based on selected glass thicknesses
     if outer_lite != 'All' and inner_lite != 'All':
         outer_weight = weight_per_sqft.get(outer_lite, 0)
         inner_weight = weight_per_sqft.get(inner_lite, 0)
         total_weight_per_sqft = (2 * outer_weight) + inner_weight
         
-        weight_col1, weight_col2 = st.columns(2)
+        # Add OA input for TPS/sealant calculation
+        oa_input_col, weight_col1, weight_col2 = st.columns([1, 1, 1])
+        
+        with oa_input_col:
+            oa_thickness = st.number_input("OA Thickness (mm)", min_value=0.0, max_value=100.0, value=0.0, step=0.1, 
+                                          help="Overall thickness of the IGU in millimeters")
         
         with weight_col1:
             st.metric("Weight per Square Foot", f"{total_weight_per_sqft:.2f} lbs/ft²")
@@ -938,12 +954,54 @@ def main():
         with weight_col2:
             if custom_width > 0 and custom_height > 0:
                 custom_area = (custom_width * custom_height) / 144
-                total_unit_weight = total_weight_per_sqft * custom_area
-                st.metric("Total Unit Weight", f"{total_unit_weight:.2f} lbs")
+                glass_weight = total_weight_per_sqft * custom_area
+                
+                # Calculate TPS and secondary sealant weight if OA is provided
+                if oa_thickness > 0:
+                    # Convert dimensions to cm
+                    width_cm = custom_width * 2.54
+                    height_cm = custom_height * 2.54
+                    perimeter_cm = 2 * (width_cm + height_cm)
+                    
+                    # Lite thicknesses - use actual thicknesses (not nominal)
+                    lite1 = actual_thickness.get(outer_lite, outer_lite)
+                    lite2 = actual_thickness.get(inner_lite, inner_lite)
+                    lite3 = actual_thickness.get(outer_lite, outer_lite)
+                    
+                    # Secondary Sealant calculation
+                    # Volume = 0.4 cm × (OA - Lite1 - Lite3) cm × Perimeter cm
+                    secondary_height_mm = oa_thickness - lite1 - lite3
+                    secondary_height_cm = secondary_height_mm / 10  # Convert mm to cm
+                    secondary_volume_cm3 = 0.4 * secondary_height_cm * perimeter_cm
+                    secondary_weight_g = secondary_volume_cm3 * 1.52  # g/cm³
+                    secondary_weight_lbs = secondary_weight_g / 453.592  # Convert g to lbs
+                    
+                    # TPS calculation
+                    # Volume per cavity = 0.65 cm × [(OA - Lite1 - Lite2 - Lite3) / 2] cm × Perimeter cm
+                    tps_height_per_cavity_mm = (oa_thickness - lite1 - lite2 - lite3) / 2
+                    tps_height_per_cavity_cm = tps_height_per_cavity_mm / 10  # Convert mm to cm
+                    tps_volume_per_cavity_cm3 = 0.65 * tps_height_per_cavity_cm * perimeter_cm
+                    total_tps_volume_cm3 = tps_volume_per_cavity_cm3 * 2  # 2 cavities
+                    tps_weight_g = total_tps_volume_cm3 * 1.28  # g/cm³
+                    tps_weight_lbs = tps_weight_g / 453.592  # Convert g to lbs
+                    
+                    # Total weight
+                    tps_sealant_weight = tps_weight_lbs + secondary_weight_lbs
+                    total_unit_weight = glass_weight + tps_sealant_weight
+                    
+                    st.metric("Total Unit Weight", f"{total_unit_weight:.2f} lbs")
+                    st.caption(f"<small>Glass: {glass_weight:.2f} lbs | TPS/Sealant: {tps_sealant_weight:.2f} lbs</small>", 
+                              unsafe_allow_html=True)
+                else:
+                    st.metric("Total Unit Weight", f"{glass_weight:.2f} lbs")
+                    st.caption("<small>Glass only (enter OA for TPS/sealant)</small>", unsafe_allow_html=True)
             else:
                 st.metric("Total Unit Weight", "Enter dimensions")
         
-        st.caption("⚠️ Weight is approximate and does not include weight of TPS/secondary seal")
+        if oa_thickness > 0:
+            st.caption("⚠️ TPS and secondary sealant weight is approximate")
+        else:
+            st.caption("⚠️ Weight is approximate and does not include weight of TPS/secondary seal")
     else:
         st.info("Select specific Outer Lites and Center Lite thicknesses to calculate weight")
     
