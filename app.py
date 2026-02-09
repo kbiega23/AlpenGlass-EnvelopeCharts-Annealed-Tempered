@@ -571,14 +571,31 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
     )
     return fig
 
-def generate_annealed_curve(min_edge, max_edge, max_area):
+def generate_annealed_curve(min_edge, max_edge, max_area, is_core_range=True):
     """
     Generate the curve for annealed glass that fills BELOW the constraint curve.
     The minimum size exclusion only applies to the bottom-left corner (0-16 x 0-16).
     Returns x and y coordinates for the polygon.
+    
+    For core range with rectangular sheet constraints (e.g., 6mm: 95"x71"),
+    the curve is L-shaped. For tech range, keeps hyperbolic curve.
+    
+    Args:
+        is_core_range: If True and rectangular constraint exists, use L-shape.
+                      If False, always use hyperbolic curve.
     """
     curve_x = []
     curve_y = []
+    
+    # Calculate implied short edge from area constraint
+    short_edge = max_area / max_edge if max_edge > 0 else max_edge
+    
+    # Determine if we have a meaningful rectangular constraint
+    # (short_edge significantly less than max_edge)
+    has_rect_constraint = (short_edge < max_edge - 5)  # 5" tolerance
+    
+    # Only apply L-shaped boundary to core range
+    apply_rect_constraint = has_rect_constraint and is_core_range
     
     # Start at (min_edge, 0) to avoid drawing line through excluded region
     curve_x.append(min_edge)
@@ -600,42 +617,63 @@ def generate_annealed_curve(min_edge, max_edge, max_area):
     curve_x.append(0)
     curve_y.append(y_at_yaxis)
     
-    # Determine where the hyperbola intersects the max_edge horizontal line
-    # This is where x = max_area / max_edge
-    x_hyperbola_at_max_edge = max_area / max_edge
-    
-    # Check if hyperbola is the binding constraint or if max_edge dominates
-    if x_hyperbola_at_max_edge <= max_edge:
-        # Hyperbola is binding - trace the curved section
-        # From x=0, go along y=max_edge until we reach the hyperbola
-        curve_x.append(x_hyperbola_at_max_edge)
+    if apply_rect_constraint:
+        # Rectangular sheet constraint: creates L-shaped boundary (CORE RANGE ONLY)
+        # Valid region: (x ≤ max_edge AND y ≤ short_edge) OR (x ≤ short_edge AND y ≤ max_edge)
+        
+        # From y-axis, go along y=max_edge to x=short_edge
+        curve_x.append(short_edge)
         curve_y.append(max_edge)
         
-        # Then trace the hyperbola from x_hyperbola_at_max_edge to max_edge
-        for x in range(int(x_hyperbola_at_max_edge) + 1, min(int(max_edge) + 1, 151)):
-            y = min(max_area / x, max_edge, 150)
-            
-            if y >= min_edge:
-                curve_x.append(x)
-                curve_y.append(y)
-            else:
-                # Once y drops below min_edge, add final point and stop
-                x_at_min = max_area / min_edge
-                if x_at_min <= 150:
-                    curve_x.append(x_at_min)
-                    curve_y.append(min_edge)
-                break
-    else:
-        # Max_edge dominates - create rectangular boundary
-        # Go horizontally along y=max_edge from x=0 to x=max_edge
+        # Go DOWN to the corner where both rectangles meet at (short_edge, short_edge)
+        curve_x.append(short_edge)
+        curve_y.append(short_edge)
+        
+        # Go RIGHT along y=short_edge to x=max_edge
         curve_x.append(max_edge)
-        curve_y.append(max_edge)
-    
-    # From the end of the curve, drop down to the x-axis
-    if curve_x:
-        last_x = curve_x[-1]
-        curve_x.append(last_x)
+        curve_y.append(short_edge)
+        
+        # Go DOWN to x-axis
+        curve_x.append(max_edge)
         curve_y.append(0)
+    else:
+        # Original hyperbolic logic (TECH RANGE or no rectangular constraint)
+        # Determine where the hyperbola intersects the max_edge horizontal line
+        # This is where x = max_area / max_edge
+        x_hyperbola_at_max_edge = max_area / max_edge
+        
+        # Check if hyperbola is the binding constraint or if max_edge dominates
+        if x_hyperbola_at_max_edge <= max_edge:
+            # Hyperbola is binding - trace the curved section
+            # From x=0, go along y=max_edge until we reach the hyperbola
+            curve_x.append(x_hyperbola_at_max_edge)
+            curve_y.append(max_edge)
+            
+            # Then trace the hyperbola from x_hyperbola_at_max_edge to max_edge
+            for x in range(int(x_hyperbola_at_max_edge) + 1, min(int(max_edge) + 1, 151)):
+                y = min(max_area / x, max_edge, 150)
+                
+                if y >= min_edge:
+                    curve_x.append(x)
+                    curve_y.append(y)
+                else:
+                    # Once y drops below min_edge, add final point and stop
+                    x_at_min = max_area / min_edge
+                    if x_at_min <= 150:
+                        curve_x.append(x_at_min)
+                        curve_y.append(min_edge)
+                    break
+        else:
+            # Max_edge dominates - create rectangular boundary
+            # Go horizontally along y=max_edge from x=0 to x=max_edge
+            curve_x.append(max_edge)
+            curve_y.append(max_edge)
+        
+        # From the end of the curve, drop down to the x-axis
+        if curve_x:
+            last_x = curve_x[-1]
+            curve_x.append(last_x)
+            curve_y.append(0)
     
     # Close the polygon back to starting point (min_edge, 0)
     curve_x.append(min_edge)
@@ -643,34 +681,54 @@ def generate_annealed_curve(min_edge, max_edge, max_area):
     
     return curve_x, curve_y
 
-def get_annealed_label_points(min_edge, max_edge, max_area):
+def get_annealed_label_points(min_edge, max_edge, max_area, is_core_range=True):
     """
     Get key points to label on annealed glass curves.
     Returns list of (x, y, label) tuples for key boundary points.
-    Labels where the hyperbolic curve intersects y=max_edge and x=max_edge boundaries.
+    
+    For core range with rectangular sheet constraints (e.g., 6mm: 95"x71"), labels the two L-shape corners.
+    For tech range, labels where curve intersects max_edge boundaries (hyperbolic).
     """
     label_points = []
     
-    # Point 1: Where the hyperbolic curve intersects the horizontal line y = max_edge
-    # This is the transition point where the curve bends from horizontal to hyperbolic
-    # It occurs at x = max_area / max_edge
-    x_transition = max_area / max_edge
+    # Calculate implied short edge from area constraint
+    short_edge = max_area / max_edge if max_edge > 0 else max_edge
     
-    if x_transition >= min_edge and x_transition <= 150:
-        y_transition = max_edge
-        area_sqft = (x_transition * y_transition) / 144
-        label = f"{x_transition:.0f}\" × {y_transition:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_transition, y_transition, label))
+    # Determine if we have a meaningful rectangular constraint
+    has_rect_constraint = (short_edge < max_edge - 5)  # 5" tolerance
     
-    # Point 2: Where the hyperbolic curve intersects the vertical line x = max_edge
-    # At x = max_edge, y = min(max_area / max_edge, max_edge)
-    x_at_max = max_edge
-    y_at_max = min(max_area / x_at_max, max_edge)
+    # Only apply L-shaped labeling to core range
+    apply_rect_constraint = has_rect_constraint and is_core_range
     
-    if y_at_max >= min_edge and x_at_max <= 150:
-        area_sqft = (x_at_max * y_at_max) / 144
-        label = f"{x_at_max:.0f}\" × {y_at_max:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((x_at_max, y_at_max, label))
+    if apply_rect_constraint:
+        # Label the two corner points of the L-shaped constraint (CORE RANGE)
+        # Point 1: (short_edge, max_edge) - portrait orientation corner
+        area_sqft = (short_edge * max_edge) / 144
+        label = f"{short_edge:.0f}\" × {max_edge:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((short_edge, max_edge, label))
+        
+        # Point 2: (max_edge, short_edge) - landscape orientation corner
+        label = f"{max_edge:.0f}\" × {short_edge:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((max_edge, short_edge, label))
+    else:
+        # Original hyperbolic labeling logic (TECH RANGE or no constraint)
+        # Point 1: Where the hyperbolic curve intersects the horizontal line y = max_edge
+        x_transition = max_area / max_edge
+        
+        if x_transition >= min_edge and x_transition <= 150:
+            y_transition = max_edge
+            area_sqft = (x_transition * y_transition) / 144
+            label = f"{x_transition:.0f}\" × {y_transition:.0f}\"\n{area_sqft:.1f} sq ft"
+            label_points.append((x_transition, y_transition, label))
+        
+        # Point 2: Where the hyperbolic curve intersects the vertical line x = max_edge
+        x_at_max = max_edge
+        y_at_max = min(max_area / x_at_max, max_edge)
+        
+        if y_at_max >= min_edge and x_at_max <= 150:
+            area_sqft = (x_at_max * y_at_max) / 144
+            label = f"{x_at_max:.0f}\" × {y_at_max:.0f}\"\n{area_sqft:.1f} sq ft"
+            label_points.append((x_at_max, y_at_max, label))
     
     return label_points
 
@@ -709,11 +767,30 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
             meets_min = (x >= min_edge or y >= min_edge)
             max_dim = max(x, y)
             
-            # Check technical limit constraints (area and max edge only)
+            # Calculate implied short edges from area constraints
+            tech_short_edge = tech_max_area / tech_max_edge if tech_max_edge > 0 else tech_max_edge
+            core_short_edge = core_max_area / core_max_edge if core_max_edge > 0 else core_max_edge
+            
+            # Check if dimensions fit on rectangular sheet (for 6mm: 95x71)
+            # Only apply rectangular constraint if implied short edge is meaningfully less than max edge
+            tech_has_rect_constraint = (tech_short_edge < tech_max_edge - 5)  # 5" tolerance
+            core_has_rect_constraint = (core_short_edge < core_max_edge - 5)  # 5" tolerance
+            
+            tech_fits_on_sheet = True
+            if tech_has_rect_constraint:
+                tech_fits_on_sheet = ((x <= tech_max_edge and y <= tech_short_edge) or 
+                                     (x <= tech_short_edge and y <= tech_max_edge))
+            
+            core_fits_on_sheet = True
+            if core_has_rect_constraint:
+                core_fits_on_sheet = ((x <= core_max_edge and y <= core_short_edge) or 
+                                     (x <= core_short_edge and y <= core_max_edge))
+            
+            # Check technical limit constraints (area, max edge - NO rectangular constraint for tech)
             in_tech = (area_sqin <= tech_max_area and max_dim <= tech_max_edge and meets_min)
             
-            # Check core range constraints (area and max edge only)
-            in_core = (area_sqin <= core_max_area and max_dim <= core_max_edge and meets_min)
+            # Check core range constraints (area, max edge, AND rectangular sheet for core only)
+            in_core = (area_sqin <= core_max_area and max_dim <= core_max_edge and meets_min and core_fits_on_sheet)
             
             if in_core:
                 Z[i, j] = 2
@@ -737,7 +814,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     ))
     
     # CHANGED ORDER: Plot Standard Sizing curve FIRST (so it appears below)
-    core_curve_x, core_curve_y = generate_annealed_curve(min_edge, core_max_edge, core_max_area)
+    core_curve_x, core_curve_y = generate_annealed_curve(min_edge, core_max_edge, core_max_area, is_core_range=True)
     
     fig.add_trace(go.Scatter(
         x=core_curve_x, y=core_curve_y, fill='toself',
@@ -748,7 +825,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     
     # Add labels for Standard Sizing key points
     if show_labels:
-        core_key_points = get_annealed_label_points(min_edge, core_max_edge, core_max_area)
+        core_key_points = get_annealed_label_points(min_edge, core_max_edge, core_max_area, is_core_range=True)
         for x, y, label in core_key_points:
             fig.add_trace(go.Scatter(
                 x=[x], y=[y],
@@ -762,7 +839,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
             ))
     
     # CHANGED ORDER: Plot Custom Range curve SECOND (so it appears on top)
-    tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area)
+    tech_curve_x, tech_curve_y = generate_annealed_curve(min_edge, tech_max_edge, tech_max_area, is_core_range=False)
     
     fig.add_trace(go.Scatter(
         x=tech_curve_x, y=tech_curve_y, fill='toself',
@@ -773,7 +850,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
     
     # Add labels for Custom Range key points
     if show_labels:
-        tech_key_points = get_annealed_label_points(min_edge, tech_max_edge, tech_max_area)
+        tech_key_points = get_annealed_label_points(min_edge, tech_max_edge, tech_max_area, is_core_range=False)
         for x, y, label in tech_key_points:
             fig.add_trace(go.Scatter(
                 x=[x], y=[y],
@@ -815,8 +892,28 @@ def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech
     if is_annealed:
         # For annealed: core_param1=max_edge, core_param2=max_area, tech_param1=max_edge, tech_param2=max_area
         max_dim = max(custom_width, custom_height)
+        
+        # Calculate implied short edges from area constraints
+        tech_short_edge = tech_param2 / tech_param1 if tech_param1 > 0 else tech_param1
+        core_short_edge = core_param2 / core_param1 if core_param1 > 0 else core_param1
+        
+        # Check if we have rectangular constraints (e.g., 6mm: 95x71)
+        tech_has_rect_constraint = (tech_short_edge < tech_param1 - 5)  # 5" tolerance
+        core_has_rect_constraint = (core_short_edge < core_param1 - 5)  # 5" tolerance
+        
+        # Check if dimensions fit on rectangular sheets
+        tech_fits_on_sheet = True
+        if tech_has_rect_constraint:
+            tech_fits_on_sheet = ((custom_width <= tech_param1 and custom_height <= tech_short_edge) or 
+                                 (custom_width <= tech_short_edge and custom_height <= tech_param1))
+        
+        core_fits_on_sheet = True
+        if core_has_rect_constraint:
+            core_fits_on_sheet = ((custom_width <= core_param1 and custom_height <= core_short_edge) or 
+                                 (custom_width <= core_short_edge and custom_height <= core_param1))
+        
         in_tech = (area_sqin <= tech_param2 and max_dim <= tech_param1 and meets_min)
-        in_core = (area_sqin <= core_param2 and max_dim <= core_param1 and meets_min)
+        in_core = (area_sqin <= core_param2 and max_dim <= core_param1 and meets_min and core_fits_on_sheet)
     else:
         # For tempered: core_param1=list of (long,short) tuples, core_param2=tech tiers (not used separately)
         # tech_param1=list of (long,short) tuples, tech_param2 not used
@@ -1173,8 +1270,28 @@ def main():
                 else:
                     area_sqin = custom_width * custom_height
                     max_dim = max(custom_width, custom_height)
+                    
+                    # Calculate implied short edges from area constraints
+                    tech_short_edge = tech_max_area * 144 / tech_max_edge if tech_max_edge > 0 else tech_max_edge
+                    core_short_edge = core_max_area * 144 / core_max_edge if core_max_edge > 0 else core_max_edge
+                    
+                    # Check if we have rectangular constraints (e.g., 6mm: 95x71)
+                    tech_has_rect_constraint = (tech_short_edge < tech_max_edge - 5)
+                    core_has_rect_constraint = (core_short_edge < core_max_edge - 5)
+                    
+                    # Check if dimensions fit on rectangular sheets
+                    tech_fits_on_sheet = True
+                    if tech_has_rect_constraint:
+                        tech_fits_on_sheet = ((custom_width <= tech_max_edge and custom_height <= tech_short_edge) or 
+                                             (custom_width <= tech_short_edge and custom_height <= tech_max_edge))
+                    
+                    core_fits_on_sheet = True
+                    if core_has_rect_constraint:
+                        core_fits_on_sheet = ((custom_width <= core_max_edge and custom_height <= core_short_edge) or 
+                                             (custom_width <= core_short_edge and custom_height <= core_max_edge))
+                    
                     in_tech = (area_sqin <= tech_max_area * 144 and max_dim <= tech_max_edge and meets_min)
-                    in_core = (area_sqin <= core_max_area * 144 and max_dim <= core_max_edge and meets_min)
+                    in_core = (area_sqin <= core_max_area * 144 and max_dim <= core_max_edge and meets_min and core_fits_on_sheet)
                 
                 if in_core:
                     st.success("✓ **Within Standard Sizing** - Standard pricing and lead time")
