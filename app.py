@@ -1062,8 +1062,8 @@ def main():
             # Add quad sizing table
             st.markdown("#### Max Sizing for Quad Configurations with inter-pane gap < 3/8\"")
             quad_data = {
-                "Outer Lites": ["3mm", "5mm", "6mm"],
-                "Max Size": ["18ft²", "35ft²", "40ft²"]
+                "Outer Lites": ["3mm", "4mm", "5mm", "6mm"],
+                "Max Size": ["18ft²", "25ft²", "35ft²", "40ft²"]
             }
             quad_df = pd.DataFrame(quad_data)
             st.table(quad_df)
