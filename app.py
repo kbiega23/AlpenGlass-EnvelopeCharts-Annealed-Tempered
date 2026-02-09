@@ -577,11 +577,11 @@ def generate_annealed_curve(min_edge, max_edge, max_area, is_core_range=True):
     The minimum size exclusion only applies to the bottom-left corner (0-16 x 0-16).
     Returns x and y coordinates for the polygon.
     
-    For core range with rectangular sheet constraints (e.g., 6mm: 95"x71"),
-    the curve is L-shaped. For tech range, keeps hyperbolic curve.
+    For 6mm core range with rectangular sheet constraints (95"x71"),
+    the curve is L-shaped. For all other configs, keeps hyperbolic curve.
     
     Args:
-        is_core_range: If True and rectangular constraint exists, use L-shape.
+        is_core_range: If True and is 6mm config, use L-shape.
                       If False, always use hyperbolic curve.
     """
     curve_x = []
@@ -590,12 +590,12 @@ def generate_annealed_curve(min_edge, max_edge, max_area, is_core_range=True):
     # Calculate implied short edge from area constraint
     short_edge = max_area / max_edge if max_edge > 0 else max_edge
     
-    # Determine if we have a meaningful rectangular constraint
-    # (short_edge significantly less than max_edge)
-    has_rect_constraint = (short_edge < max_edge - 5)  # 5" tolerance
+    # Determine if this is 6mm configuration (ONLY apply L-shape to 6mm core)
+    # 6mm: max_edge=95, max_area=6745 sq in (46.84 sq ft)
+    is_6mm_config = (abs(max_edge - 95) < 1 and abs(max_area - 6745) < 10)
     
-    # Only apply L-shaped boundary to core range
-    apply_rect_constraint = has_rect_constraint and is_core_range
+    # Only apply L-shaped boundary to 6mm core range
+    apply_rect_constraint = is_6mm_config and is_core_range
     
     # Start at (min_edge, 0) to avoid drawing line through excluded region
     curve_x.append(min_edge)
@@ -686,19 +686,20 @@ def get_annealed_label_points(min_edge, max_edge, max_area, is_core_range=True):
     Get key points to label on annealed glass curves.
     Returns list of (x, y, label) tuples for key boundary points.
     
-    For core range with rectangular sheet constraints (e.g., 6mm: 95"x71"), labels the two L-shape corners.
-    For tech range, labels where curve intersects max_edge boundaries (hyperbolic).
+    For 6mm core range with rectangular sheet constraints (95"x71"), labels the two L-shape corners.
+    For all other configs, labels where curve intersects max_edge boundaries (hyperbolic).
     """
     label_points = []
     
     # Calculate implied short edge from area constraint
     short_edge = max_area / max_edge if max_edge > 0 else max_edge
     
-    # Determine if we have a meaningful rectangular constraint
-    has_rect_constraint = (short_edge < max_edge - 5)  # 5" tolerance
+    # Determine if this is 6mm configuration (ONLY apply L-shape labeling to 6mm core)
+    # 6mm: max_edge=95, max_area=6745 sq in (46.84 sq ft)
+    is_6mm_config = (abs(max_edge - 95) < 1 and abs(max_area - 6745) < 10)
     
-    # Only apply L-shaped labeling to core range
-    apply_rect_constraint = has_rect_constraint and is_core_range
+    # Only apply L-shaped labeling to 6mm core range
+    apply_rect_constraint = is_6mm_config and is_core_range
     
     if apply_rect_constraint:
         # Label the two corner points of the L-shaped constraint (CORE RANGE)
@@ -771,15 +772,14 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
             tech_short_edge = tech_max_area / tech_max_edge if tech_max_edge > 0 else tech_max_edge
             core_short_edge = core_max_area / core_max_edge if core_max_edge > 0 else core_max_edge
             
-            # Check if dimensions fit on rectangular sheet (for 6mm: 95x71)
-            # Only apply rectangular constraint if implied short edge is meaningfully less than max edge
-            tech_has_rect_constraint = (tech_short_edge < tech_max_edge - 5)  # 5" tolerance
-            core_has_rect_constraint = (core_short_edge < core_max_edge - 5)  # 5" tolerance
+            # Check if we have rectangular constraints - ONLY for 6mm configurations
+            # 6mm core: max_edge=95, max_area=6745 sq in (46.84 sq ft)
+            is_6mm_core = (abs(core_max_edge - 95) < 1 and abs(core_max_area - 6745) < 10)
+            
+            tech_has_rect_constraint = False  # Never apply to tech range
+            core_has_rect_constraint = is_6mm_core
             
             tech_fits_on_sheet = True
-            if tech_has_rect_constraint:
-                tech_fits_on_sheet = ((x <= tech_max_edge and y <= tech_short_edge) or 
-                                     (x <= tech_short_edge and y <= tech_max_edge))
             
             core_fits_on_sheet = True
             if core_has_rect_constraint:
@@ -897,15 +897,15 @@ def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech
         tech_short_edge = tech_param2 / tech_param1 if tech_param1 > 0 else tech_param1
         core_short_edge = core_param2 / core_param1 if core_param1 > 0 else core_param1
         
-        # Check if we have rectangular constraints (e.g., 6mm: 95x71)
-        tech_has_rect_constraint = (tech_short_edge < tech_param1 - 5)  # 5" tolerance
-        core_has_rect_constraint = (core_short_edge < core_param1 - 5)  # 5" tolerance
+        # Check if we have rectangular constraints - ONLY for 6mm configurations
+        # 6mm core: max_edge=95, max_area=6745 sq in (46.84 sq ft)
+        is_6mm_core = (abs(core_param1 - 95) < 1 and abs(core_param2 - 6745) < 10)
         
-        # Check if dimensions fit on rectangular sheets
+        tech_has_rect_constraint = False  # Never apply to tech range
+        core_has_rect_constraint = is_6mm_core
+        
+        # Check if dimensions fit on rectangular sheets (only for 6mm core)
         tech_fits_on_sheet = True
-        if tech_has_rect_constraint:
-            tech_fits_on_sheet = ((custom_width <= tech_param1 and custom_height <= tech_short_edge) or 
-                                 (custom_width <= tech_short_edge and custom_height <= tech_param1))
         
         core_fits_on_sheet = True
         if core_has_rect_constraint:
@@ -1275,15 +1275,15 @@ def main():
                     tech_short_edge = tech_max_area * 144 / tech_max_edge if tech_max_edge > 0 else tech_max_edge
                     core_short_edge = core_max_area * 144 / core_max_edge if core_max_edge > 0 else core_max_edge
                     
-                    # Check if we have rectangular constraints (e.g., 6mm: 95x71)
-                    tech_has_rect_constraint = (tech_short_edge < tech_max_edge - 5)
-                    core_has_rect_constraint = (core_short_edge < core_max_edge - 5)
+                    # Check if we have rectangular constraints - ONLY for 6mm configurations
+                    # 6mm core: max_edge=95, max_area=6745 sq in (46.84 sq ft)
+                    is_6mm_core = (abs(core_max_edge - 95) < 1 and abs(core_max_area * 144 - 6745) < 10)
                     
-                    # Check if dimensions fit on rectangular sheets
+                    tech_has_rect_constraint = False  # Never apply to tech range
+                    core_has_rect_constraint = is_6mm_core
+                    
+                    # Check if dimensions fit on rectangular sheets (only for 6mm core)
                     tech_fits_on_sheet = True
-                    if tech_has_rect_constraint:
-                        tech_fits_on_sheet = ((custom_width <= tech_max_edge and custom_height <= tech_short_edge) or 
-                                             (custom_width <= tech_short_edge and custom_height <= tech_max_edge))
                     
                     core_fits_on_sheet = True
                     if core_has_rect_constraint:
