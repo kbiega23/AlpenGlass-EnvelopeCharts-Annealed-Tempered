@@ -25,7 +25,7 @@ This interactive tool helps you determine if your window dimensions fit within A
 **Understanding the Visualization:**
 - **Standard Sizing** (blue): Efficient, low-cost production range
 - **Custom Range** (orange): Maximum physically achievable size (may require special order and longer lead time)
-- **Minimum Size**: At least one edge must be 16" or greater
+- **Minimum Size**: 16\" × 7\" (long edge ≥ 16\", short edge ≥ 7\")
 - **White areas**: Do not meet minimum size requirements
 
 **Configuration Selection:**
@@ -80,8 +80,8 @@ def compute_envelope(rectangles, min_edge):
     """
     Compute the outer envelope (boundary) of a set of rectangles.
     Each rectangle is defined as (long_edge, short_edge).
-    Returns x, y coordinates for the outer perimeter traced clockwise from origin.
-    Expected path: (0,16), (16,16), (16,0), then clockwise around envelope, back to (0,16)
+    Returns x, y coordinates for the outer perimeter.
+    Minimum size: 16" x 7" (long edge >= 16", short edge >= 7").
     """
     if not rectangles:
         return [], []
@@ -123,9 +123,10 @@ def compute_envelope(rectangles, min_edge):
             max_y_overall = max(long for long, short in rectangles)
             ranges.append((x, y_start, max_y_overall))
     
-    # Build envelope path starting from (0, min_edge)
-    envelope_x = [0, min_edge, min_edge]
-    envelope_y = [min_edge, min_edge, 0]
+    # Build envelope path with L-shaped minimum size exclusion corner (16" x 7")
+    # Path: (0,16) -> (7,16) -> (7,7) -> (16,7) -> (16,0) then clockwise around envelope
+    envelope_x = [0, 7, 7, min_edge, min_edge]
+    envelope_y = [min_edge, min_edge, 7, 7, 0]
     
     # Trace the right and top edges
     for i, (x, y_start, y_end) in enumerate(ranges):
@@ -148,7 +149,7 @@ def compute_envelope(rectangles, min_edge):
                 envelope_y.append(y_end)
     
     # Complete polygon back to start
-    max_y = envelope_y[-1] if len(envelope_y) > 3 else min_edge
+    max_y = envelope_y[-1] if len(envelope_y) > 5 else min_edge
     
     # Go left to y-axis at max_y, then down to min_edge
     envelope_x.append(0)
@@ -240,7 +241,8 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
         for j in range(len(x_range)):
             x, y = X[i, j], Y[i, j]
             
-            meets_min = (x >= min_edge or y >= min_edge)
+            # Minimum size: 16" x 7" (long edge >= 16", short edge >= 7")
+            meets_min = (max(x, y) >= 16 and min(x, y) >= 7)
             
             # Check if point is in any technical tier
             in_tech = False
@@ -574,7 +576,8 @@ def create_tempered_plot(config_data, min_edge=16, show_all=False, all_configs_d
 def generate_annealed_curve(min_edge, max_edge, max_area, is_core_range=True):
     """
     Generate the curve for annealed glass that fills BELOW the constraint curve.
-    The minimum size exclusion only applies to the bottom-left corner (0-16 x 0-16).
+    Minimum size: 16" x 7" (long edge >= 16", short edge >= 7").
+    The minimum size exclusion L-shape applies to the bottom-left corner.
     Returns x and y coordinates for the polygon.
     
     For 6mm core range: L-shaped boundary (95"x71" sheet constraint)
@@ -599,15 +602,21 @@ def generate_annealed_curve(min_edge, max_edge, max_area, is_core_range=True):
     # Only apply special boundaries to core range
     apply_6mm_constraint = is_6mm_config and is_core_range
     apply_5mm_constraint = is_5mm_config and is_core_range
-    
-    # Start at (min_edge, 0) to avoid drawing line through excluded region
-    curve_x.append(min_edge)
+
+    # Start the polygon with the L-shaped minimum size exclusion corner (16" x 7")
+    # Path along exclusion boundary: (16,0) -> (16,7) -> (7,7) -> (7,16) -> (0,16)
+    curve_x.append(16)
     curve_y.append(0)
-    
-    # Go up to min_edge corner
-    curve_x.append(min_edge)
-    curve_y.append(min_edge)
-    
+
+    curve_x.append(16)
+    curve_y.append(7)
+
+    curve_x.append(7)
+    curve_y.append(7)
+
+    curve_x.append(7)
+    curve_y.append(min_edge)  # min_edge = 16
+
     # Go left to y-axis at min_edge height
     curve_x.append(0)
     curve_y.append(min_edge)
@@ -725,8 +734,8 @@ def generate_annealed_curve(min_edge, max_edge, max_area, is_core_range=True):
             curve_x.append(last_x)
             curve_y.append(0)
     
-    # Close the polygon back to starting point (min_edge, 0)
-    curve_x.append(min_edge)
+    # Close the polygon back to starting point (16, 0)
+    curve_x.append(16)
     curve_y.append(0)
     
     return curve_x, curve_y
@@ -821,7 +830,8 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
             x, y = X[i, j], Y[i, j]
             area_sqin = x * y
             area_sqft = area_sqin / 144
-            meets_min = (x >= min_edge or y >= min_edge)
+            # Minimum size: 16" x 7" (long edge >= 16", short edge >= 7")
+            meets_min = (max(x, y) >= 16 and min(x, y) >= 7)
             max_dim = max(x, y)
             
             # Calculate implied short edges from area constraints
@@ -947,7 +957,8 @@ def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech
     custom_width, custom_height = custom_point
     area_sqft = (custom_width * custom_height) / 144
     area_sqin = custom_width * custom_height
-    meets_min = (custom_width >= min_edge or custom_height >= min_edge)
+    # Minimum size: 16" x 7" (long edge >= 16", short edge >= 7")
+    meets_min = (max(custom_width, custom_height) >= 16 and min(custom_width, custom_height) >= 7)
     
     if is_annealed:
         # For annealed: core_param1=max_edge, core_param2=max_area, tech_param1=max_edge, tech_param2=max_area
@@ -1003,7 +1014,7 @@ def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech
     elif in_tech:
         marker_color, status_text = 'rgb(255, 165, 0)', "⚠ Within Custom Range"
     elif not meets_min:
-        marker_color, status_text = 'rgb(255, 0, 0)', "✗ Below Minimum Size"
+        marker_color, status_text = 'rgb(255, 0, 0)', "✗ Below Minimum Size (16\" × 7\" required)"
     else:
         marker_color, status_text = 'rgb(255, 0, 0)', "✗ Outside Technical Limits"
     
@@ -1280,14 +1291,15 @@ def main():
                 st.warning(f"Max Edge: **{tech_max_edge}\"**\nMax Area: **{tech_max_area} sq ft**")
             
             st.markdown("**Minimum Size**")
-            st.error("At least one edge must be **16\"** or greater")
+            st.error("Minimum size: **16\"** × **7\"** (long edge ≥ 16\", short edge ≥ 7\")")
             
             if custom_point:
                 st.markdown("---")
                 st.markdown("### 🎯 Your Custom Size Status")
                 
                 custom_width, custom_height = custom_point
-                meets_min = (custom_width >= 16 or custom_height >= 16)
+                # Minimum size: 16" x 7" (long edge >= 16", short edge >= 7")
+                meets_min = (max(custom_width, custom_height) >= 16 and min(custom_width, custom_height) >= 7)
                 
                 if glass_type == "Tempered":
                     # Collect all tiers for checking
@@ -1366,7 +1378,7 @@ def main():
                 elif in_tech:
                     st.warning("⚠ **Within Custom Range** - May require special order and longer lead time")
                 elif not meets_min:
-                    st.error("✗ **Below Minimum Size** - At least one edge must be 16\" or greater")
+                    st.error("✗ **Below Minimum Size** - Minimum size is 16\" × 7\"")
                 else:
                     st.error("✗ **Outside Technical Limits** - This size cannot be manufactured")
     else:
