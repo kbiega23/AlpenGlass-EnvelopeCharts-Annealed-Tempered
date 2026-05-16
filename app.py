@@ -547,20 +547,18 @@ def generate_annealed_curve(min_edge, max_edge, max_area, is_core_range=True):
     16x16 corner notch preserved; shapes clip at x=7 and y=7.
     Returns x and y coordinates for the polygon.
     
-    For 6mm core range: L-shaped boundary (95"x71" sheet constraint)
-    For 5mm core range: Hybrid boundary (40 sq ft area + 95"x71" sheet constraints)
-    For all other configs: Hyperbolic curve
+    Configs where the 96"x72" sheet (95"x71" after trim) is binding get a hybrid
+    boundary (area hyperbola + sheet constraint). All others get a pure hyperbolic curve.
+    Detection is dynamic: applies whenever x_at_sheet_edge > sheet_short_edge and < max_edge.
     """
     curve_x = []
     curve_y = []
     
-    short_edge = max_area / max_edge if max_edge > 0 else max_edge
-    
-    is_6mm_config = (abs(max_edge - 95) < 1 and abs(max_area - 6745) < 10)
-    is_5mm_config = (abs(max_edge - 95) < 1 and abs(max_area - 5760) < 10)
-    
-    apply_6mm_constraint = is_6mm_config and is_core_range
-    apply_5mm_constraint = is_5mm_config and is_core_range
+    # Dynamic sheet constraint detection — applies to core range only
+    # Sheet is 96"x72", trimmed to 95"x71" usable (short_edge_sheet = 71)
+    sheet_short_edge = 71
+    x_at_sheet = (max_area / sheet_short_edge) if sheet_short_edge > 0 else max_edge
+    needs_sheet_constraint = is_core_range and (x_at_sheet > sheet_short_edge) and (x_at_sheet < max_edge)
     
     # Start at (min_edge=16, 7) — bottom clips at y=7 instead of y=0
     curve_x.append(min_edge)
@@ -579,45 +577,28 @@ def generate_annealed_curve(min_edge, max_edge, max_area, is_core_range=True):
     curve_x.append(7)
     curve_y.append(y_at_yaxis)
     
-    if apply_6mm_constraint:
-        # 6mm: Pure L-shaped boundary (rectangular sheet constraint only)
-        curve_x.append(short_edge)
-        curve_y.append(max_edge)
-        
-        curve_x.append(short_edge)
-        curve_y.append(short_edge)
-        
-        curve_x.append(max_edge)
-        curve_y.append(short_edge)
-        
-        # Drop to y=7
-        curve_x.append(max_edge)
-        curve_y.append(7)
-        
-    elif apply_5mm_constraint:
-        # 5mm: Hybrid boundary (area hyperbola + rectangular sheet constraint)
-        short_edge_sheet = 71
-        
+    if needs_sheet_constraint:
+        # Hybrid boundary: area hyperbola + 96"x72" sheet constraint (applies to 5mm, 6mm, etc.)
         x_at_max_edge = max_area / max_edge
         curve_x.append(x_at_max_edge)
         curve_y.append(max_edge)
         
-        for x in range(int(x_at_max_edge) + 1, int(short_edge_sheet) + 1):
+        for x in range(int(x_at_max_edge) + 1, int(sheet_short_edge) + 1):
             y = max_area / x
             if y >= 7 and y <= 150:
                 curve_x.append(x)
                 curve_y.append(y)
         
-        y_at_sheet_edge = max_area / short_edge_sheet
-        curve_x.append(short_edge_sheet)
+        y_at_sheet_edge = max_area / sheet_short_edge
+        curve_x.append(sheet_short_edge)
         curve_y.append(y_at_sheet_edge)
         
-        curve_x.append(short_edge_sheet)
-        curve_y.append(short_edge_sheet)
+        curve_x.append(sheet_short_edge)
+        curve_y.append(sheet_short_edge)
         
-        x_at_sheet_edge = max_area / short_edge_sheet
+        x_at_sheet_edge = max_area / sheet_short_edge
         curve_x.append(x_at_sheet_edge)
-        curve_y.append(short_edge_sheet)
+        curve_y.append(sheet_short_edge)
         
         for x in range(int(x_at_sheet_edge) + 1, int(max_edge) + 1):
             y = max_area / x
@@ -674,41 +655,27 @@ def get_annealed_label_points(min_edge, max_edge, max_area, is_core_range=True):
     """
     Get key points to label on annealed glass curves.
     Returns list of (x, y, label) tuples for key boundary points.
+    All configs use hyperbolic intersection labels.
     """
     label_points = []
     
-    short_edge = max_area / max_edge if max_edge > 0 else max_edge
+    # Point 1: Where hyperbolic curve intersects the horizontal line y = max_edge
+    x_transition = max_area / max_edge
     
-    is_6mm_config = (abs(max_edge - 95) < 1 and abs(max_area - 6745) < 10)
-    is_5mm_config = (abs(max_edge - 95) < 1 and abs(max_area - 5760) < 10)
+    if x_transition >= min_edge and x_transition <= 150:
+        y_transition = max_edge
+        area_sqft = (x_transition * y_transition) / 144
+        label = f"{x_transition:.0f}\" × {y_transition:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_transition, y_transition, label))
     
-    apply_L_shape_labels = is_6mm_config and is_core_range
+    # Point 2: Where hyperbolic curve intersects the vertical line x = max_edge
+    x_at_max = max_edge
+    y_at_max = min(max_area / x_at_max, max_edge)
     
-    if apply_L_shape_labels:
-        sheet_short_edge = 71
-        
-        area_sqft = (sheet_short_edge * max_edge) / 144
-        label = f"{sheet_short_edge:.0f}\" × {max_edge:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((sheet_short_edge, max_edge, label))
-        
-        label = f"{max_edge:.0f}\" × {sheet_short_edge:.0f}\"\n{area_sqft:.1f} sq ft"
-        label_points.append((max_edge, sheet_short_edge, label))
-    else:
-        x_transition = max_area / max_edge
-        
-        if x_transition >= min_edge and x_transition <= 150:
-            y_transition = max_edge
-            area_sqft = (x_transition * y_transition) / 144
-            label = f"{x_transition:.0f}\" × {y_transition:.0f}\"\n{area_sqft:.1f} sq ft"
-            label_points.append((x_transition, y_transition, label))
-        
-        x_at_max = max_edge
-        y_at_max = min(max_area / x_at_max, max_edge)
-        
-        if y_at_max >= min_edge and x_at_max <= 150:
-            area_sqft = (x_at_max * y_at_max) / 144
-            label = f"{x_at_max:.0f}\" × {y_at_max:.0f}\"\n{area_sqft:.1f} sq ft"
-            label_points.append((x_at_max, y_at_max, label))
+    if y_at_max >= min_edge and x_at_max <= 150:
+        area_sqft = (x_at_max * y_at_max) / 144
+        label = f"{x_at_max:.0f}\" × {y_at_max:.0f}\"\n{area_sqft:.1f} sq ft"
+        label_points.append((x_at_max, y_at_max, label))
     
     return label_points
 
@@ -751,11 +718,11 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
             tech_short_edge = tech_max_area / tech_max_edge if tech_max_edge > 0 else tech_max_edge
             core_short_edge = core_max_area / core_max_edge if core_max_edge > 0 else core_max_edge
             
-            is_6mm_core = (abs(core_max_edge - 95) < 1 and abs(core_max_area - 6745) < 10)
-            is_5mm_core = (abs(core_max_edge - 95) < 1 and abs(core_max_area - 5760) < 10)
-            
+            # Dynamic sheet constraint detection (sheet = 96"x72", trimmed to 95"x71")
+            sheet_short_edge_det = 71
+            x_at_sheet_det = core_max_area / sheet_short_edge_det if sheet_short_edge_det > 0 else core_max_edge
             tech_has_rect_constraint = False
-            core_has_rect_constraint = is_6mm_core or is_5mm_core
+            core_has_rect_constraint = (x_at_sheet_det > sheet_short_edge_det) and (x_at_sheet_det < core_max_edge)
             
             tech_fits_on_sheet = True
             
@@ -870,11 +837,11 @@ def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech
         tech_short_edge = tech_param2 / tech_param1 if tech_param1 > 0 else tech_param1
         core_short_edge = core_param2 / core_param1 if core_param1 > 0 else core_param1
         
-        is_6mm_core = (abs(core_param1 - 95) < 1 and abs(core_param2 - 6745) < 10)
-        is_5mm_core = (abs(core_param1 - 95) < 1 and abs(core_param2 - 5760) < 10)
-        
+        # Dynamic sheet constraint detection (sheet = 96"x72", trimmed to 95"x71")
+        sheet_short_edge_det = 71
+        x_at_sheet_det = core_param2 / sheet_short_edge_det if sheet_short_edge_det > 0 else core_param1
         tech_has_rect_constraint = False
-        core_has_rect_constraint = is_6mm_core or is_5mm_core
+        core_has_rect_constraint = (x_at_sheet_det > sheet_short_edge_det) and (x_at_sheet_det < core_param1)
         
         tech_fits_on_sheet = True
         
@@ -1223,11 +1190,11 @@ def main():
                     tech_short_edge = tech_max_area * 144 / tech_max_edge if tech_max_edge > 0 else tech_max_edge
                     core_short_edge = core_max_area * 144 / core_max_edge if core_max_edge > 0 else core_max_edge
                     
-                    is_6mm_core = (abs(core_max_edge - 95) < 1 and abs(core_max_area * 144 - 6745) < 10)
-                    is_5mm_core = (abs(core_max_edge - 95) < 1 and abs(core_max_area * 144 - 5760) < 10)
-                    
+                    # Dynamic sheet constraint detection (sheet = 96"x72", trimmed to 95"x71")
+                    sheet_short_edge_det = 71
+                    x_at_sheet_det = core_max_area * 144 / sheet_short_edge_det if sheet_short_edge_det > 0 else core_max_edge
                     tech_has_rect_constraint = False
-                    core_has_rect_constraint = is_6mm_core or is_5mm_core
+                    core_has_rect_constraint = (x_at_sheet_det > sheet_short_edge_det) and (x_at_sheet_det < core_max_edge)
                     
                     tech_fits_on_sheet = True
                     
