@@ -558,7 +558,7 @@ def generate_annealed_curve(min_edge, max_edge, max_area, is_core_range=True):
     # Sheet is 96"x72", trimmed to 95"x71" usable (short_edge_sheet = 71)
     sheet_short_edge = 71
     x_at_sheet = (max_area / sheet_short_edge) if sheet_short_edge > 0 else max_edge
-    needs_sheet_constraint = is_core_range and (x_at_sheet > sheet_short_edge) and (x_at_sheet < max_edge)
+    needs_sheet_constraint = (x_at_sheet > sheet_short_edge) and (x_at_sheet < max_edge)
     
     # Start at (min_edge=16, 7) — bottom clips at y=7 instead of y=0
     curve_x.append(min_edge)
@@ -721,10 +721,14 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
             # Dynamic sheet constraint detection (sheet = 96"x72", trimmed to 95"x71")
             sheet_short_edge_det = 71
             x_at_sheet_det = core_max_area / sheet_short_edge_det if sheet_short_edge_det > 0 else core_max_edge
-            tech_has_rect_constraint = False
             core_has_rect_constraint = (x_at_sheet_det > sheet_short_edge_det) and (x_at_sheet_det < core_max_edge)
+            x_at_sheet_tech = tech_max_area / sheet_short_edge_det if sheet_short_edge_det > 0 else tech_max_edge
+            tech_has_rect_constraint = (x_at_sheet_tech > sheet_short_edge_det) and (x_at_sheet_tech < tech_max_edge)
             
             tech_fits_on_sheet = True
+            if tech_has_rect_constraint:
+                tech_fits_on_sheet = ((x <= tech_max_edge and y <= sheet_short_edge_det) or
+                                     (x <= sheet_short_edge_det and y <= tech_max_edge))
             
             core_fits_on_sheet = True
             if core_has_rect_constraint:
@@ -732,7 +736,7 @@ def create_annealed_plot(config_data, min_edge=16, show_all=False, all_configs_d
                 core_fits_on_sheet = ((x <= core_max_edge and y <= sheet_short_edge) or 
                                      (x <= sheet_short_edge and y <= core_max_edge))
             
-            in_tech = (area_sqin <= tech_max_area and max_dim <= tech_max_edge and meets_min)
+            in_tech = (area_sqin <= tech_max_area and max_dim <= tech_max_edge and meets_min and tech_fits_on_sheet)
             in_core = (area_sqin <= core_max_area and max_dim <= core_max_edge and meets_min and core_fits_on_sheet)
             
             if in_core:
@@ -840,10 +844,14 @@ def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech
         # Dynamic sheet constraint detection (sheet = 96"x72", trimmed to 95"x71")
         sheet_short_edge_det = 71
         x_at_sheet_det = core_param2 / sheet_short_edge_det if sheet_short_edge_det > 0 else core_param1
-        tech_has_rect_constraint = False
         core_has_rect_constraint = (x_at_sheet_det > sheet_short_edge_det) and (x_at_sheet_det < core_param1)
+        x_at_sheet_tech = tech_param2 / sheet_short_edge_det if sheet_short_edge_det > 0 else tech_param1
+        tech_has_rect_constraint = (x_at_sheet_tech > sheet_short_edge_det) and (x_at_sheet_tech < tech_param1)
         
         tech_fits_on_sheet = True
+        if tech_has_rect_constraint:
+            tech_fits_on_sheet = ((custom_width <= tech_param1 and custom_height <= sheet_short_edge_det) or
+                                 (custom_width <= sheet_short_edge_det and custom_height <= tech_param1))
         
         core_fits_on_sheet = True
         if core_has_rect_constraint:
@@ -851,7 +859,7 @@ def add_custom_point(fig, custom_point, min_edge, core_param1, core_param2, tech
             core_fits_on_sheet = ((custom_width <= core_param1 and custom_height <= sheet_short_edge) or 
                                  (custom_width <= sheet_short_edge and custom_height <= core_param1))
         
-        in_tech = (area_sqin <= tech_param2 and max_dim <= tech_param1 and meets_min)
+        in_tech = (area_sqin <= tech_param2 and max_dim <= tech_param1 and meets_min and tech_fits_on_sheet)
         in_core = (area_sqin <= core_param2 and max_dim <= core_param1 and meets_min and core_fits_on_sheet)
     else:
         core_tiers = core_param1
@@ -1193,10 +1201,14 @@ def main():
                     # Dynamic sheet constraint detection (sheet = 96"x72", trimmed to 95"x71")
                     sheet_short_edge_det = 71
                     x_at_sheet_det = core_max_area * 144 / sheet_short_edge_det if sheet_short_edge_det > 0 else core_max_edge
-                    tech_has_rect_constraint = False
                     core_has_rect_constraint = (x_at_sheet_det > sheet_short_edge_det) and (x_at_sheet_det < core_max_edge)
+                    x_at_sheet_tech = tech_max_area * 144 / sheet_short_edge_det if sheet_short_edge_det > 0 else tech_max_edge
+                    tech_has_rect_constraint = (x_at_sheet_tech > sheet_short_edge_det) and (x_at_sheet_tech < tech_max_edge)
                     
                     tech_fits_on_sheet = True
+                    if tech_has_rect_constraint:
+                        tech_fits_on_sheet = ((custom_width <= tech_max_edge and custom_height <= sheet_short_edge_det) or
+                                             (custom_width <= sheet_short_edge_det and custom_height <= tech_max_edge))
                     
                     core_fits_on_sheet = True
                     if core_has_rect_constraint:
@@ -1204,7 +1216,7 @@ def main():
                         core_fits_on_sheet = ((custom_width <= core_max_edge and custom_height <= sheet_short_edge) or 
                                              (custom_width <= sheet_short_edge and custom_height <= core_max_edge))
                     
-                    in_tech = (area_sqin <= tech_max_area * 144 and max_dim <= tech_max_edge and meets_min)
+                    in_tech = (area_sqin <= tech_max_area * 144 and max_dim <= tech_max_edge and meets_min and tech_fits_on_sheet)
                     in_core = (area_sqin <= core_max_area * 144 and max_dim <= core_max_edge and meets_min and core_fits_on_sheet)
                 
                 if in_core:
